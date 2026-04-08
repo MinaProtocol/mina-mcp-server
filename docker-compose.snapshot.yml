@@ -1,0 +1,60 @@
+# Snapshot mode: Postgres loaded from an archive dump — frozen, read-only state.
+#
+# Two ways to load data:
+#
+#   A) From a local SQL dump (captured with `npm run capture-snapshot`):
+#      SNAPSHOT_DIR=./snapshots/devnet-20260405 docker compose -f docker-compose.snapshot.yml up -d
+#
+#   B) Download the latest devnet dump automatically (like company_dryrun):
+#      docker compose -f docker-compose.snapshot.yml --profile download up -d
+#
+# Then run the MCP server:
+#   MINA_MCP_MODE=snapshot node dist/index.js
+
+services:
+  archive-db:
+    image: postgres:17
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-archive}
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres} -d ${POSTGRES_DB:-archive}"]
+      interval: 5s
+      timeout: 10s
+      retries: 10
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - archive-data:/var/lib/postgresql/data
+      # Mount local snapshot SQL as init script (only runs on first start)
+      - ${SNAPSHOT_DIR:-./snapshots/devnet-latest}:/docker-entrypoint-initdb.d:ro
+
+  # Alternative: download fresh dump from GCS (activate with --profile download)
+  bootstrap-db:
+    profiles: ["download"]
+    image: ${MINA_ARCHIVE_IMAGE:-europe-west3-docker.pkg.dev/o1labs-192920/euro-docker-repo/mina-archive:7f964f7-noble-devnet}
+    depends_on:
+      archive-db:
+        condition: service_healthy
+    command:
+      - bash
+      - -c
+      - |
+        set -eox pipefail
+        DUMP_DATE=$$(date +%F_0000)
+        DUMP_URL="${ARCHIVE_DUMP_BASE_URL:-https://storage.googleapis.com/mina-archive-dumps}/${ARCHIVE_DUMP_PREFIX:-devnet-archive-dump}-$${DUMP_DATE}.sql.tar.gz"
+        echo "Downloading archive dump: $${DUMP_URL}"
+        curl -fSL -O "$${DUMP_URL}"
+        tar -zxvf ${ARCHIVE_DUMP_PREFIX:-devnet-archive-dump}-$${DUMP_DATE}.sql.tar.gz
+        psql postgres://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@archive-db:5432/${POSTGRES_DB:-archive} \
+          -c "ALTER SYSTEM SET max_connections = 500" \
+          -c "ALTER SYSTEM SET max_locks_per_transaction = 100" \
+          -c "ALTER SYSTEM SET max_pred_locks_per_relation = 100" \
+          -c "ALTER SYSTEM SET max_pred_locks_per_transaction = 5000"
+        psql postgres://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@archive-db:5432/${POSTGRES_DB:-archive} \
+          -f ${ARCHIVE_DUMP_PREFIX:-devnet-archive-dump}-$${DUMP_DATE}.sql
+
+volumes:
+  archive-data:

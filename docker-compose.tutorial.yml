@@ -1,0 +1,57 @@
+# Tutorial mode: single-container Mina lightnet with all services embedded.
+#
+# Uses o1labs/mina-local-network which includes:
+#   - Mina Daemon (block producer, no proofs, 20s blocks)
+#   - Mina Archive Node + PostgreSQL
+#   - Archive-Node-API (GraphQL for events/actions/blocks)
+#   - Mina Accounts Manager (1000+ pre-funded test accounts)
+#   - Lightweight Explorer UI
+#   - NGINX reverse proxy
+#
+# Usage:
+#   docker compose -f docker-compose.tutorial.yml up -d
+#   # Wait ~1-2 min for sync, then:
+#   MINA_MCP_MODE=tutorial node dist/index.js
+#
+# Exposed endpoints:
+#   http://localhost:3085/graphql  — Mina Daemon GraphQL (direct)
+#   http://localhost:8080/graphql  — Mina Daemon GraphQL (via NGINX + CORS)
+#   http://localhost:8080/         — Lightweight Explorer UI
+#   http://localhost:8181/         — Accounts Manager REST API
+#   http://localhost:8282/         — Archive-Node-API GraphQL
+#   localhost:5432                 — PostgreSQL (archive DB)
+#
+# Pre-funded accounts:
+#   1000+ accounts with 1550 MINA each
+#   Password: "naughty blue worm"
+#   Use Accounts Manager to acquire/release them
+
+services:
+  mina-lightnet:
+    image: ${LIGHTNET_IMAGE:-o1labs/mina-local-network:compatible-latest-lightnet}
+    environment:
+      NETWORK_TYPE: ${NETWORK_TYPE:-single-node}
+      PROOF_LEVEL: ${PROOF_LEVEL:-none}
+      LOG_LEVEL: ${LOG_LEVEL:-Info}
+      RUN_ARCHIVE_NODE: "true"
+      SLOT_TIME: "${SLOT_TIME:-20000}"
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+      POSTGRES_DB: ${POSTGRES_DB:-archive}
+    ports:
+      - "${MINA_REST_PORT:-3085}:3085"       # Daemon GraphQL (direct)
+      - "${NGINX_PORT:-8080}:8080"            # NGINX proxy (GraphQL + Explorer)
+      - "${ACCOUNTS_MANAGER_PORT:-8181}:8181" # Accounts Manager
+      - "${ARCHIVE_API_PORT:-8282}:8282"      # Archive-Node-API GraphQL
+      - "${POSTGRES_PORT:-5432}:5432"         # PostgreSQL
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:8080/graphql -H 'Content-Type: application/json' -d '{\"query\":\"{syncStatus}\"}' | grep -q SYNCED || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+      start_period: 60s
+    volumes:
+      - lightnet-data:/var/lib/postgresql/data
+
+volumes:
+  lightnet-data:

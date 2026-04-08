@@ -1,0 +1,35 @@
+{
+  "name": "mina-mcp-server",
+  "version": "0.1.0",
+  "description": "MCP server for Mina Protocol daemon and archive node",
+  "type": "module",
+  "main": "dist/index.js",
+  "bin": {
+    "mina-mcp-server": "dist/index.js"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "dev": "tsc -p tsconfig.json --watch",
+    "start": "node dist/index.js",
+    "start:snapshot": "node dist/index.js --mode snapshot",
+    "start:tutorial": "node dist/index.js --mode tutorial",
+    "capture-snapshot": "node dist/snapshots/capture.js",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:unit": "vitest run test/unit",
+    "test:mcp": "vitest run test/mcp",
+    "test:integration": "vitest run test/integration --test-timeout 120000"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.12.1",
+    "pg": "^8.13.1",
+    "zod": "^3.24.2"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.0",
+    "@types/pg": "^8.11.10",
+    "typescript": "^5.7.0",
+    "vitest": "^3.1.1"
+  },
+  "license": "Apache-2.0"
+}

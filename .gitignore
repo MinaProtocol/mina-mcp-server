@@ -1,0 +1,4 @@
+node_modules/
+dist/
+snapshots/*/archive-dump.sql
+*.tgz
