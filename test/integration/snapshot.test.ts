@@ -64,7 +64,7 @@ describe("Snapshot Mode Integration", () => {
     const text = (result.content as Array<{ type: string; text: string }>)[0].text;
     const parsed = JSON.parse(text);
     expect(parsed.mode).toBe("snapshot");
-    expect(parsed.total_blocks).toBeGreaterThan(0);
+    expect(Number(parsed.total_blocks)).toBeGreaterThan(0);
   });
 
   it("list_blocks should return blocks from archive", async () => {
@@ -78,7 +78,7 @@ describe("Snapshot Mode Integration", () => {
     const result = await client.callTool({ name: "get_archive_stats", arguments: {} });
     const text = (result.content as Array<{ type: string; text: string }>)[0].text;
     const stats = JSON.parse(text);
-    expect(stats.total_blocks).toBeGreaterThan(0);
+    expect(Number(stats.total_blocks)).toBeGreaterThan(0);
   });
 
   it("get_archive_schema should return table definitions", async () => {
@@ -96,7 +96,7 @@ describe("Snapshot Mode Integration", () => {
     });
     const text = (result.content as Array<{ type: string; text: string }>)[0].text;
     const parsed = JSON.parse(text);
-    expect(parsed.rows[0].count).toBeGreaterThan(0);
+    expect(Number(parsed.rows[0].count)).toBeGreaterThan(0);
   });
 
   it("query_archive_sql should reject write queries", async () => {
