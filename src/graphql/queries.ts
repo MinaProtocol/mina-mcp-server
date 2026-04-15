@@ -132,8 +132,8 @@ export const QUERIES = {
     }
   }`,
 
-  sendPayment: `mutation SendPayment($input: SendPaymentInput!, $signature: SignatureInput) {
-    sendPayment(input: $input, signature: $signature) {
+  sendPayment: `mutation SendPayment($input: SendPaymentInput!) {
+    sendPayment(input: $input) {
       payment {
         id hash kind nonce
         source { publicKey }
@@ -143,8 +143,8 @@ export const QUERIES = {
     }
   }`,
 
-  sendDelegation: `mutation SendDelegation($input: SendDelegationInput!, $signature: SignatureInput) {
-    sendDelegation(input: $input, signature: $signature) {
+  sendDelegation: `mutation SendDelegation($input: SendDelegationInput!) {
+    sendDelegation(input: $input) {
       delegation {
         id hash kind nonce
         source { publicKey }
