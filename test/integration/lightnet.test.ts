@@ -56,24 +56,22 @@ describe("Lightnet Integration", () => {
   });
 
   describe("Accounts Manager", () => {
-    let account: TestAccount;
-
-    it("should acquire a test account", async () => {
-      account = await accountsMgr.acquireAccount({ isRegularAccount: true });
+    it("should acquire, list, and release a test account", async () => {
+      // Acquire
+      const account = await accountsMgr.acquireAccount({ isRegularAccount: true });
       expect(account.pk).toMatch(/^B62q/);
       expect(account.sk).toMatch(/^EKE/);
-    });
 
-    it("should list acquired accounts", async () => {
-      const accounts = await accountsMgr.listAcquiredAccounts();
-      expect(accounts.length).toBeGreaterThanOrEqual(1);
-      expect(accounts.some((a) => a.pk === account.pk)).toBe(true);
-    });
+      // Should appear in acquired list
+      const before = await accountsMgr.listAcquiredAccounts();
+      expect(before.some((a) => a.pk === account.pk)).toBe(true);
 
-    it("should release the account", async () => {
+      // Release
       await accountsMgr.releaseAccount(account);
-      const accounts = await accountsMgr.listAcquiredAccounts();
-      expect(accounts.some((a) => a.pk === account.pk)).toBe(false);
+
+      // Should no longer appear in acquired list
+      const after = await accountsMgr.listAcquiredAccounts();
+      expect(after.some((a) => a.pk === account.pk)).toBe(false);
     });
   });
 

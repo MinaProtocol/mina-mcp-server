@@ -132,6 +132,7 @@ describe("Tutorial Mode Integration - MCP Tools", () => {
     });
 
     it("should check transaction status", async () => {
+      expect(paymentHash).toBeDefined();
       const result = await client.callTool({
         name: "get_transaction_status",
         arguments: { payment: paymentHash },
