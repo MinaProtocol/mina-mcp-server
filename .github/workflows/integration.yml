@@ -1,0 +1,102 @@
+name: Integration Tests
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  integration:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    services:
+      mina:
+        image: o1labs/mina-local-network:compatible-latest-lightnet
+        env:
+          NETWORK_TYPE: single-node
+          PROOF_LEVEL: none
+          LOG_LEVEL: Info
+          RUN_ARCHIVE_NODE: true
+          SLOT_TIME: 20000
+        ports:
+          - 3085:3085
+          - 8080:8080
+          - 8181:8181
+          - 8282:8282
+          - 5432:5432
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build
+        run: npm run build
+
+      - name: Wait for Mina network
+        uses: o1-labs/wait-for-mina-network-action@v1
+        with:
+          mina-graphql-port: "8080"
+          max-attempts: "60"
+          polling-interval-ms: "10000"
+
+      - name: Run integration tests (tutorial mode)
+        env:
+          MINA_GRAPHQL_ENDPOINT: http://localhost:3085/graphql
+          ARCHIVE_API_ENDPOINT: http://localhost:8282
+          ACCOUNTS_MANAGER_ENDPOINT: http://localhost:8181
+          PGHOST: localhost
+          PGPORT: "5432"
+          PGUSER: postgres
+          PGPASSWORD: postgres
+          PGDATABASE: archive
+        run: npx vitest run test/integration/lightnet.test.ts test/integration/tutorial.test.ts --test-timeout 120000 --fileParallelism=false
+
+      - name: Capture snapshot from live network
+        env:
+          PGPASSWORD: postgres
+        run: |
+          node dist/snapshots/capture.js \
+            --db-host localhost --db-port 5432 --db-name archive \
+            --db-user postgres --db-password postgres \
+            --graphql http://localhost:3085/graphql \
+            --output ./snapshots/ci-snapshot
+
+      - name: Start snapshot database
+        run: |
+          # Stop the lightnet container's postgres usage and load snapshot into a fresh DB
+          docker run -d --name snapshot-db \
+            -e POSTGRES_DB=archive \
+            -e POSTGRES_USER=postgres \
+            -e POSTGRES_PASSWORD=postgres \
+            -p 15432:5432 \
+            -v ${{ github.workspace }}/snapshots/ci-snapshot:/docker-entrypoint-initdb.d:ro \
+            postgres:17
+          # Wait for postgres to be ready
+          for i in $(seq 1 30); do
+            if docker exec snapshot-db pg_isready -U postgres -d archive 2>/dev/null; then
+              echo "Snapshot DB ready"
+              break
+            fi
+            echo "Waiting for snapshot DB... ($i/30)"
+            sleep 2
+          done
+
+      - name: Run snapshot mode tests
+        env:
+          PGHOST: localhost
+          PGPORT: "15432"
+          PGUSER: postgres
+          PGPASSWORD: postgres
+          PGDATABASE: archive
+        run: npx vitest run test/integration/snapshot.test.ts --test-timeout 30000

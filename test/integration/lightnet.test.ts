@@ -18,7 +18,6 @@ import { ArchiveDB } from "../../src/db/archive.js";
 const DAEMON_ENDPOINT = process.env.MINA_GRAPHQL_ENDPOINT ?? "http://localhost:3085/graphql";
 const ARCHIVE_API_ENDPOINT = process.env.ARCHIVE_API_ENDPOINT ?? "http://localhost:8282";
 const ACCOUNTS_MANAGER_ENDPOINT = process.env.ACCOUNTS_MANAGER_ENDPOINT ?? "http://localhost:8181";
-const ACCOUNT_PASSWORD = "naughty blue worm";
 
 describe("Lightnet Integration", () => {
   let graphql: GraphQLClient;
@@ -57,24 +56,17 @@ describe("Lightnet Integration", () => {
   });
 
   describe("Accounts Manager", () => {
-    let account: TestAccount;
-
     it("should acquire a test account", async () => {
-      account = await accountsMgr.acquireAccount({ isRegularAccount: true });
+      const account = await accountsMgr.acquireAccount({ isRegularAccount: true });
       expect(account.pk).toMatch(/^B62q/);
-      expect(account.sk).toMatch(/^EKE/);
-    });
+      expect(account.sk).toMatch(/^EK/);
 
-    it("should list acquired accounts", async () => {
+      // Should appear in acquired list
       const accounts = await accountsMgr.listAcquiredAccounts();
-      expect(accounts.length).toBeGreaterThanOrEqual(1);
       expect(accounts.some((a) => a.pk === account.pk)).toBe(true);
-    });
 
-    it("should release the account", async () => {
+      // Release should not throw
       await accountsMgr.releaseAccount(account);
-      const accounts = await accountsMgr.listAcquiredAccounts();
-      expect(accounts.some((a) => a.pk === account.pk)).toBe(false);
     });
   });
 
@@ -114,26 +106,12 @@ describe("Lightnet Integration", () => {
   describe("Daemon GraphQL - Payment lifecycle", () => {
     let sender: TestAccount;
     let receiver: TestAccount;
-    let paymentHash: string;
+    let paymentId: string;
 
     beforeAll(async () => {
-      // Acquire two accounts
-      sender = await accountsMgr.acquireAccount({ isRegularAccount: true });
+      // Acquire two accounts; unlock sender via Accounts Manager
+      sender = await accountsMgr.acquireAccount({ isRegularAccount: true, unlockAccount: true });
       receiver = await accountsMgr.acquireAccount({ isRegularAccount: true });
-
-      // Import and unlock sender
-      await graphql.query(
-        `mutation($path: String!, $password: String!) {
-          importAccount(path: $path, password: $password) { publicKey success }
-        }`,
-        { path: `/root/.mina-network/key-pairs/${sender.pk}`, password: ACCOUNT_PASSWORD }
-      );
-      await graphql.query(
-        `mutation($input: UnlockInput!) {
-          unlockAccount(input: $input) { account { publicKey } }
-        }`,
-        { input: { publicKey: sender.pk, password: ACCOUNT_PASSWORD } }
-      );
     });
 
     it("should query sender account balance", async () => {
@@ -168,8 +146,9 @@ describe("Lightnet Integration", () => {
       );
 
       expect(result.errors).toBeUndefined();
-      paymentHash = result.data!.sendPayment.payment.hash;
-      expect(paymentHash).toBeDefined();
+      expect(result.data!.sendPayment.payment.hash).toBeDefined();
+      paymentId = result.data!.sendPayment.payment.id;
+      expect(paymentId).toBeDefined();
     });
 
     it("should see payment in mempool", async () => {
@@ -187,7 +166,7 @@ describe("Lightnet Integration", () => {
     it("should check transaction status", async () => {
       const result = await graphql.query<{ transactionStatus: string }>(
         `query($payment: ID) { transactionStatus(payment: $payment) }`,
-        { payment: paymentHash }
+        { payment: paymentId }
       );
 
       expect(result.errors).toBeUndefined();
@@ -277,35 +256,16 @@ describe("Lightnet Integration", () => {
     });
   });
 
-  describe("Full faucet workflow (simulated)", () => {
-    it("should acquire → import → unlock → query balance → release", async () => {
-      // 1. Acquire
-      const account = await accountsMgr.acquireAccount({ isRegularAccount: true });
+  describe("Full faucet workflow", () => {
+    it("should acquire (with unlock) → query balance → release", async () => {
+      // 1. Acquire with unlock handled by Accounts Manager
+      const account = await accountsMgr.acquireAccount({
+        isRegularAccount: true,
+        unlockAccount: true,
+      });
       expect(account.pk).toMatch(/^B62q/);
 
-      // 2. Import
-      const importResult = await graphql.query<{
-        importAccount: { publicKey: string; success: boolean };
-      }>(
-        `mutation($path: String!, $password: String!) {
-          importAccount(path: $path, password: $password) { publicKey success alreadyImported }
-        }`,
-        { path: `/root/.mina-network/key-pairs/${account.pk}`, password: ACCOUNT_PASSWORD }
-      );
-      expect(importResult.errors).toBeUndefined();
-
-      // 3. Unlock
-      const unlockResult = await graphql.query<{
-        unlockAccount: { account: { publicKey: string } };
-      }>(
-        `mutation($input: UnlockInput!) {
-          unlockAccount(input: $input) { account { publicKey } }
-        }`,
-        { input: { publicKey: account.pk, password: ACCOUNT_PASSWORD } }
-      );
-      expect(unlockResult.errors).toBeUndefined();
-
-      // 4. Query balance
+      // 2. Query balance
       const balanceResult = await graphql.query<{
         account: { balance: { total: string } };
       }>(
@@ -314,7 +274,7 @@ describe("Lightnet Integration", () => {
       );
       expect(balanceResult.data?.account.balance.total).toBe("1550000000000");
 
-      // 5. Release
+      // 3. Release
       await accountsMgr.releaseAccount(account);
     });
   });

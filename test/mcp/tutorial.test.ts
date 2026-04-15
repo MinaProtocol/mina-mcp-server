@@ -238,19 +238,10 @@ describe("MCP Server - Tutorial Mode", () => {
   });
 
   describe("test account tools", () => {
-    it("faucet should acquire, import, and unlock account", async () => {
-      // acquireAccount mock
+    it("faucet should acquire and return ready account", async () => {
       (ctx.mockAccountsManager.acquireAccount as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
         pk: "B62qfaucet",
         sk: "EKfaucet",
-      });
-      // importAccount mutation
-      (ctx.mockGraphQL.query as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
-        data: { importAccount: { publicKey: "B62qfaucet", alreadyImported: false, success: true } },
-      });
-      // unlockAccount mutation
-      (ctx.mockGraphQL.query as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
-        data: { unlockAccount: { account: { publicKey: "B62qfaucet" } } },
       });
 
       const result = await ctx.client.callTool({ name: "faucet", arguments: {} });
