@@ -92,7 +92,7 @@ describe("Tutorial Mode Integration - MCP Tools", () => {
     let senderSk: string;
     let receiverPk: string;
     let receiverSk: string;
-    let paymentHash: string;
+    let paymentId: string;
 
     it("should get a sender account via faucet", async () => {
       const result = await client.callTool({ name: "faucet", arguments: {} });
@@ -125,17 +125,19 @@ describe("Tutorial Mode Integration - MCP Tools", () => {
         },
       });
       const text = (result.content as Array<{ type: string; text: string }>)[0].text;
+      expect(text).not.toContain("Payment failed");
       const parsed = JSON.parse(text);
       expect(parsed.payment).toBeDefined();
-      paymentHash = parsed.payment.hash;
-      expect(paymentHash).toBeDefined();
+      expect(parsed.payment.hash).toBeDefined();
+      paymentId = parsed.payment.id;
+      expect(paymentId).toBeDefined();
     });
 
     it("should check transaction status", async () => {
-      expect(paymentHash).toBeDefined();
+      expect(paymentId).toBeDefined();
       const result = await client.callTool({
         name: "get_transaction_status",
-        arguments: { payment: paymentHash },
+        arguments: { payment: paymentId },
       });
       const text = (result.content as Array<{ type: string; text: string }>)[0].text;
       const status = JSON.parse(text);

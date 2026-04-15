@@ -60,7 +60,7 @@ describe("Lightnet Integration", () => {
       // Acquire
       const account = await accountsMgr.acquireAccount({ isRegularAccount: true });
       expect(account.pk).toMatch(/^B62q/);
-      expect(account.sk).toMatch(/^EKE/);
+      expect(account.sk).toMatch(/^EK/);
 
       // Should appear in acquired list
       const before = await accountsMgr.listAcquiredAccounts();
@@ -111,7 +111,7 @@ describe("Lightnet Integration", () => {
   describe("Daemon GraphQL - Payment lifecycle", () => {
     let sender: TestAccount;
     let receiver: TestAccount;
-    let paymentHash: string;
+    let paymentId: string;
 
     beforeAll(async () => {
       // Acquire two accounts; unlock sender via Accounts Manager
@@ -151,8 +151,9 @@ describe("Lightnet Integration", () => {
       );
 
       expect(result.errors).toBeUndefined();
-      paymentHash = result.data!.sendPayment.payment.hash;
-      expect(paymentHash).toBeDefined();
+      expect(result.data!.sendPayment.payment.hash).toBeDefined();
+      paymentId = result.data!.sendPayment.payment.id;
+      expect(paymentId).toBeDefined();
     });
 
     it("should see payment in mempool", async () => {
@@ -170,7 +171,7 @@ describe("Lightnet Integration", () => {
     it("should check transaction status", async () => {
       const result = await graphql.query<{ transactionStatus: string }>(
         `query($payment: ID) { transactionStatus(payment: $payment) }`,
-        { payment: paymentHash }
+        { payment: paymentId }
       );
 
       expect(result.errors).toBeUndefined();

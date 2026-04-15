@@ -60,7 +60,7 @@ jobs:
           PGUSER: postgres
           PGPASSWORD: postgres
           PGDATABASE: archive
-        run: npx vitest run test/integration/lightnet.test.ts test/integration/tutorial.test.ts --test-timeout 120000
+        run: npx vitest run test/integration/lightnet.test.ts test/integration/tutorial.test.ts --test-timeout 120000 --fileParallelism=false
 
       - name: Capture snapshot from live network
         env:
