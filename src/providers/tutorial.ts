@@ -92,10 +92,19 @@ export class TutorialProvider extends SnapshotProvider {
   }
 
   async getTransactionStatus(payment?: string, zkappTransaction?: string) {
-    const result = await this.graphql.query(QUERIES.transactionStatus, {
-      payment,
-      zkappTransaction,
-    });
+    // Build query with only the provided variable to avoid "Missing variable" errors
+    let query: string;
+    let variables: Record<string, string>;
+    if (payment) {
+      query = `query TransactionStatus($payment: ID!) { transactionStatus(payment: $payment) }`;
+      variables = { payment };
+    } else if (zkappTransaction) {
+      query = `query TransactionStatus($zkappTransaction: ID!) { transactionStatus(zkappTransaction: $zkappTransaction) }`;
+      variables = { zkappTransaction };
+    } else {
+      throw new Error("Provide either payment or zkappTransaction ID");
+    }
+    const result = await this.graphql.query(query, variables);
     if (result.errors) throw new Error(result.errors[0].message);
     return (result.data as Record<string, unknown>)?.transactionStatus ?? null;
   }
