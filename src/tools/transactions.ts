@@ -108,8 +108,14 @@ export function registerTransactionTools(
           content: [{ type: "text", text: "This tool is only available in tutorial mode." }],
         };
       }
-      const result = await provider.getTransactionStatus(payment, zkappTransaction);
-      return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
+      try {
+        const result = await provider.getTransactionStatus(payment, zkappTransaction);
+        return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
+      } catch (e) {
+        return {
+          content: [{ type: "text", text: `Transaction status error: ${(e as Error).message}` }],
+        };
+      }
     }
   );
 

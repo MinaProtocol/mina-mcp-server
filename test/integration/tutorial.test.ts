@@ -140,6 +140,7 @@ describe("Tutorial Mode Integration - MCP Tools", () => {
         arguments: { payment: paymentId },
       });
       const text = (result.content as Array<{ type: string; text: string }>)[0].text;
+      expect(text).not.toContain("error");
       const status = JSON.parse(text);
       expect(["PENDING", "INCLUDED", "UNKNOWN"]).toContain(status);
     });
