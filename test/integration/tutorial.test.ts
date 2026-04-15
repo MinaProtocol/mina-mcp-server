@@ -76,7 +76,7 @@ describe("Tutorial Mode Integration - MCP Tools", () => {
     const result = await client.callTool({ name: "get_sync_status", arguments: {} });
     const text = (result.content as Array<{ type: string; text: string }>)[0].text;
     const parsed = JSON.parse(text);
-    expect(parsed.syncStatus).toBe("SYNCED");
+    expect(parsed.daemonStatus.syncStatus).toBe("SYNCED");
   });
 
   it("get_genesis_constants should return constants", async () => {

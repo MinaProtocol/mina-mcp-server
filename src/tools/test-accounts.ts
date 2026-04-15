@@ -19,35 +19,13 @@ export function registerTestAccountTools(
         return { content: [{ type: "text", text: "This tool requires tutorial mode with Accounts Manager." }] };
       }
 
-      const password = "naughty blue worm";
-
       try {
-        // Step 1: Acquire account from pool
-        const account = await provider.accountsManager.acquireAccount({ isRegularAccount });
-
-        // Step 2: Import key file into daemon
-        try {
-          await provider.graphql.query(
-            `mutation ImportAccount($path: String!, $password: String!) {
-              importAccount(path: $path, password: $password) {
-                publicKey alreadyImported success
-              }
-            }`,
-            { path: `/root/.mina-network/key-pairs/${account.pk}`, password }
-          );
-        } catch {
-          // May already be imported — continue
-        }
-
-        // Step 3: Unlock for signing
-        await provider.graphql.query(
-          `mutation UnlockAccount($input: UnlockInput!) {
-            unlockAccount(input: $input) {
-              account { publicKey }
-            }
-          }`,
-          { input: { publicKey: account.pk, password } }
-        );
+        // Acquire account with unlock — the Accounts Manager handles
+        // importing the key file and unlocking it inside the container.
+        const account = await provider.accountsManager.acquireAccount({
+          isRegularAccount,
+          unlockAccount: true,
+        });
 
         return {
           content: [{
