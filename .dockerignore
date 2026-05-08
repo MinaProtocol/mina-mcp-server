@@ -1,0 +1,11 @@
+node_modules
+dist
+test
+snapshots
+.git
+.github
+*.log
+.env
+.env.example
+docker-compose.snapshot.yml
+docker-compose.tutorial.yml

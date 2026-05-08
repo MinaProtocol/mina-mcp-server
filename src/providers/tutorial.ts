@@ -2,6 +2,8 @@ import { GraphQLClient } from "../graphql/client.js";
 import { QUERIES } from "../graphql/queries.js";
 import { ArchiveNodeAPI } from "../graphql/archive-api.js";
 import { AccountsManager } from "../graphql/accounts-manager.js";
+import { SessionTracker } from "../session/tracker.js";
+import { ResetController } from "../reset/controller.js";
 import { SnapshotProvider } from "./snapshot.js";
 import { ArchiveDB } from "../db/archive.js";
 
@@ -9,18 +11,24 @@ export class TutorialProvider extends SnapshotProvider {
   public graphql: GraphQLClient;
   public archiveApi: ArchiveNodeAPI | null;
   public accountsManager: AccountsManager | null;
+  public tracker: SessionTracker | null;
+  public resetController: ResetController | null;
   public override readonly mode: string = "tutorial";
 
   constructor(
     db: ArchiveDB,
     graphql: GraphQLClient,
     archiveApi?: ArchiveNodeAPI,
-    accountsManager?: AccountsManager
+    accountsManager?: AccountsManager,
+    tracker?: SessionTracker,
+    resetController?: ResetController
   ) {
     super(db);
     this.graphql = graphql;
     this.archiveApi = archiveApi ?? null;
     this.accountsManager = accountsManager ?? null;
+    this.tracker = tracker ?? null;
+    this.resetController = resetController ?? null;
   }
 
   async getSyncStatus(): Promise<string> {

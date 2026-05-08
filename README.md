@@ -2,19 +2,44 @@
 
 MCP (Model Context Protocol) server for the [Mina Protocol](https://minaprotocol.com/) blockchain. Exposes Mina blockchain data and operations through MCP-compatible tools that can be used by AI assistants and other MCP clients.
 
+> **Status: beta / preview.** This package is **not self-sufficient** — it is a thin MCP layer on top of backing services (PostgreSQL and, in tutorial mode, a running Mina lightnet). You must stand up the required infrastructure yourself *before* starting the MCP server. See [Prerequisites](#prerequisites) below for what each mode needs. A future release will ship a bundled SQLite snapshot for zero-infra use, and a hosted-endpoint live mode.
+
 ## Features
 
 - **24+ MCP tools** for querying accounts, blocks, transactions, zkApp events/actions, network status, and more
 - **Two operating modes:**
-  - **Snapshot** — read-only access to a frozen archive database (no live network required)
+  - **Snapshot** — read-only access to a frozen archive database (no live network required, but Postgres is)
   - **Tutorial** — full read/write access to a live Mina lightnet (daemon, archive, test accounts)
 - **Safe SQL access** — read-only queries against the archive database with timeout protection
 - **Test account faucet** — acquire/release pre-funded accounts for testing (tutorial mode)
 
 ## Prerequisites
 
+**Common (all modes):**
+
 - Node.js >= 18
-- Docker & Docker Compose (for running the database or lightnet)
+- Docker & Docker Compose (to run the backing services below)
+
+**Snapshot mode additionally requires:**
+
+| Component | Purpose | Default endpoint |
+|-----------|---------|------------------|
+| PostgreSQL with Mina archive schema + data | Source of all read queries | `localhost:5432` |
+
+You can bring this up with `docker-compose.snapshot.yml` (ships in the repo). A snapshot dump under `./snapshots/devnet-latest` — or downloaded via the compose `download` profile — is required.
+
+**Tutorial mode additionally requires** a full local lightnet:
+
+| Component | Purpose | Default endpoint |
+|-----------|---------|------------------|
+| Mina Daemon GraphQL | Live chain queries, sending payments | `http://localhost:3085/graphql` |
+| Archive-Node-API | zkApp events/actions, archive blocks | `http://localhost:8282` |
+| Accounts Manager | Test account faucet | `http://localhost:8181` |
+| PostgreSQL (archive DB) | Read queries | `localhost:5432` |
+
+All four are brought up by `docker-compose.tutorial.yml`. Expect ~1–2 minutes for the network to sync before tools respond correctly.
+
+> **Note:** if you install from npm (`npx @o1labs/mina-mcp-server`), the docker-compose files are *not* included in the tarball — you will need to clone this repo, or copy the `docker-compose.*.yml` files out of it, to start the infra.
 
 ## Quick Start
 
@@ -182,6 +207,76 @@ When running in tutorial mode with `docker-compose.tutorial.yml`, the following 
 | Accounts Manager | `http://localhost:8181/` | Test account REST API |
 | Archive-Node-API | `http://localhost:8282/` | Archive GraphQL (events/actions) |
 | PostgreSQL | `localhost:5432` | Archive database |
+
+## Using with Claude Desktop / Claude Code
+
+Once the backing infrastructure is up (see [Prerequisites](#prerequisites)), register the MCP server with your MCP client. Example for Claude Desktop (`claude_desktop_config.json`) or Claude Code (`.mcp.json`):
+
+```json
+{
+  "mcpServers": {
+    "mina": {
+      "command": "npx",
+      "args": ["-y", "-p", "@o1labs/mina-mcp-server@beta", "mina-mcp-server", "--mode", "snapshot"]
+    }
+  }
+}
+```
+
+For tutorial mode, replace `snapshot` with `tutorial` and make sure the lightnet is running first.
+
+**The MCP server will not start the infrastructure for you.** If Postgres / daemon / archive-node-api / accounts-manager are not reachable, tools will return connection errors.
+
+## Deploying on Fly.io
+
+The repo ships a `Dockerfile` and `fly.toml` that bundle the MCP server with the lightnet image into a single Fly machine. The MCP server runs in HTTP/SSE mode behind Fly's TLS terminator; the lightnet's Explorer UI + GraphQL playground are exposed on a second port for humans.
+
+```bash
+# First-time setup (creates the app and provisions a machine)
+flyctl launch --no-deploy --copy-config
+
+# Or, if app already exists:
+flyctl deploy
+```
+
+After deploy:
+
+| URL | Audience | What's there |
+|-----|----------|--------------|
+| `https://mina-mcp.fly.dev/mcp` | AI clients | MCP streamable-HTTP endpoint |
+| `https://mina-mcp.fly.dev/health` | ops | Liveness probe + active session count |
+| `https://mina-mcp.fly.dev:8080/` | humans | Lightweight Mina Explorer UI |
+| `https://mina-mcp.fly.dev:8080/graphql` | humans | GraphQL playground (CORS-enabled NGINX proxy) |
+
+Rename the app to your own subdomain with `flyctl apps rename` or attach a custom domain via `flyctl certs add mcp.your-domain.com` (CNAME the domain to `mina-mcp.fly.dev`).
+
+### Connecting an MCP client to the hosted server
+
+Claude Desktop / Claude Code config (`.mcp.json`):
+
+```json
+{
+  "mcpServers": {
+    "mina": {
+      "url": "https://mina-mcp.fly.dev/mcp"
+    }
+  }
+}
+```
+
+The first session call returns a `Mcp-Session-Id` header that the client must echo on every subsequent request. When the session disconnects, every test account it acquired via `faucet` is automatically released.
+
+### Operational notes
+
+- `auto_stop_machines = "stop"` + `min_machines_running = 0` lets the machine scale to zero when idle. First request after idle pays a ~60–120s cold-start while the lightnet syncs.
+- The chain-reset janitor (planned) reads `provider.resetController.isFrozen()`; admins / demo presenters can pause it via the `freeze_reset` MCP tool.
+- See `deploy/start.sh` for the in-container boot order: lightnet first, MCP server last.
+
+## Roadmap
+
+- **Bundled SQLite snapshot** — replace the Postgres requirement in snapshot mode with a SQLite file shipped inside the package, so `npx @o1labs/mina-mcp-server --mode snapshot` runs with zero infra.
+- **Live mode** — connect to hosted public devnet / mainnet GraphQL + archive endpoints, so live chain queries work without any local setup.
+- **Tutorial mode** — will remain infrastructure-dependent (local lightnet), as it is intended for development against a controllable network.
 
 ## License
 

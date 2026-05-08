@@ -8,6 +8,8 @@ import { ArchiveDB } from "../../src/db/archive.js";
 import { GraphQLClient } from "../../src/graphql/client.js";
 import { ArchiveNodeAPI } from "../../src/graphql/archive-api.js";
 import { AccountsManager } from "../../src/graphql/accounts-manager.js";
+import { SessionTracker } from "../../src/session/tracker.js";
+import { ResetController } from "../../src/reset/controller.js";
 import { registerAccountTools } from "../../src/tools/accounts.js";
 import { registerBlockTools } from "../../src/tools/blocks.js";
 import { registerTransactionTools } from "../../src/tools/transactions.js";
@@ -15,6 +17,9 @@ import { registerNetworkTools } from "../../src/tools/network.js";
 import { registerSchemaTools } from "../../src/tools/schema.js";
 import { registerZkAppTools } from "../../src/tools/zkapps.js";
 import { registerTestAccountTools } from "../../src/tools/test-accounts.js";
+import { registerAdminTools } from "../../src/tools/admin.js";
+import { registerStateTools } from "../../src/tools/state.js";
+import { registerExampleTools } from "../../src/tools/examples.js";
 
 export function createMockDb() {
   return {
@@ -78,6 +83,9 @@ export async function setupSnapshotMcp(): Promise<McpTestContext> {
   registerSchemaTools(server, getProvider);
   registerZkAppTools(server, getProvider);
   registerTestAccountTools(server, getProvider);
+  registerAdminTools(server, getProvider);
+  registerStateTools(server, getProvider);
+  registerExampleTools(server, getProvider);
 
   const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
 
@@ -102,6 +110,8 @@ export interface TutorialMcpTestContext extends McpTestContext {
   mockGraphQL: GraphQLClient;
   mockArchiveApi: ArchiveNodeAPI;
   mockAccountsManager: AccountsManager;
+  tracker: SessionTracker;
+  resetController: ResetController;
 }
 
 export async function setupTutorialMcp(): Promise<TutorialMcpTestContext> {
@@ -109,7 +119,9 @@ export async function setupTutorialMcp(): Promise<TutorialMcpTestContext> {
   const mockGraphQL = createMockGraphQL();
   const mockArchiveApi = createMockArchiveApi();
   const mockAccountsManager = createMockAccountsManager();
-  const provider = new TutorialProvider(mockDb, mockGraphQL, mockArchiveApi, mockAccountsManager);
+  const tracker = new SessionTracker(mockAccountsManager);
+  const resetController = new ResetController();
+  const provider = new TutorialProvider(mockDb, mockGraphQL, mockArchiveApi, mockAccountsManager, tracker, resetController);
 
   const server = new McpServer({ name: "mina-tutorial-test", version: "0.1.0" });
   const getProvider = () => provider;
@@ -121,6 +133,9 @@ export async function setupTutorialMcp(): Promise<TutorialMcpTestContext> {
   registerSchemaTools(server, getProvider);
   registerZkAppTools(server, getProvider);
   registerTestAccountTools(server, getProvider);
+  registerAdminTools(server, getProvider);
+  registerStateTools(server, getProvider);
+  registerExampleTools(server, getProvider);
 
   const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
 
@@ -136,6 +151,8 @@ export async function setupTutorialMcp(): Promise<TutorialMcpTestContext> {
     mockGraphQL,
     mockArchiveApi,
     mockAccountsManager,
+    tracker,
+    resetController,
     cleanup: async () => {
       await client.close();
       await server.close();
