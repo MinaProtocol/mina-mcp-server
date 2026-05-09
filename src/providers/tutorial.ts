@@ -94,7 +94,7 @@ export class TutorialProvider extends SnapshotProvider {
   }
 
   async getMempool(publicKey?: string) {
-    const result = await this.graphql.query(QUERIES.pooledUserCommands, { publicKey });
+    const result = await this.graphql.query(QUERIES.pooledUserCommands, { publicKey: publicKey ?? null });
     if (result.errors) throw new Error(result.errors[0].message);
     return (result.data as Record<string, unknown>)?.pooledUserCommands ?? [];
   }
