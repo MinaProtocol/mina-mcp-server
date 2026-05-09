@@ -1,8 +1,11 @@
 # Fly.io app config for the bundled MCP server + Mina lightnet image.
-# Public URL: https://mina-mcp.fly.dev (rename via `flyctl apps rename` if needed).
+# Public URL: https://mina-mcp-sandbox.fly.dev
 
-app = "mina-mcp"
+app = "mina-mcp-sandbox"
 primary_region = "iad"
+
+kill_signal = "SIGTERM"
+kill_timeout = "30s"
 
 [build]
   dockerfile = "Dockerfile"
@@ -60,4 +63,4 @@ primary_region = "iad"
 
 [[vm]]
   size = "shared-cpu-2x"
-  memory = "2gb"
+  memory = "4gb"

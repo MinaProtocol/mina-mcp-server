@@ -243,12 +243,12 @@ After deploy:
 
 | URL | Audience | What's there |
 |-----|----------|--------------|
-| `https://mina-mcp.fly.dev/mcp` | AI clients | MCP streamable-HTTP endpoint |
-| `https://mina-mcp.fly.dev/health` | ops | Liveness probe + active session count |
-| `https://mina-mcp.fly.dev:8080/` | humans | Lightweight Mina Explorer UI |
-| `https://mina-mcp.fly.dev:8080/graphql` | humans | GraphQL playground (CORS-enabled NGINX proxy) |
+| `https://mina-mcp-sandbox.fly.dev/mcp` | AI clients | MCP streamable-HTTP endpoint |
+| `https://mina-mcp-sandbox.fly.dev/health` | ops | Liveness probe + active session count |
+| `https://mina-mcp-sandbox.fly.dev:8080/` | humans | Lightweight Mina Explorer UI |
+| `https://mina-mcp-sandbox.fly.dev:8080/graphql` | humans | GraphQL playground (CORS-enabled NGINX proxy) |
 
-Rename the app to your own subdomain with `flyctl apps rename` or attach a custom domain via `flyctl certs add mcp.your-domain.com` (CNAME the domain to `mina-mcp.fly.dev`).
+Rename the app to your own subdomain with `flyctl apps rename` or attach a custom domain via `flyctl certs add mcp.your-domain.com` (CNAME the domain to `mina-mcp-sandbox.fly.dev`).
 
 ### Connecting an MCP client to the hosted server
 
@@ -258,7 +258,7 @@ Claude Desktop / Claude Code config (`.mcp.json`):
 {
   "mcpServers": {
     "mina": {
-      "url": "https://mina-mcp.fly.dev/mcp"
+      "url": "https://mina-mcp-sandbox.fly.dev/mcp"
     }
   }
 }
