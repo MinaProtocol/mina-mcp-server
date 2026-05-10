@@ -1,0 +1,32 @@
+name: Deploy
+
+# Deploys the bundled MCP+lightnet image to fly.io on every version tag
+# (v*). The smoke workflow picks up via workflow_run and verifies the
+# deploy ~30s after this completes.
+#
+# Required secret: FLY_API_TOKEN (deploy-scoped — see README).
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+
+concurrency:
+  group: fly-deploy
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: superfly/flyctl-actions/setup-flyctl@master
+
+      - name: Deploy to fly
+        env:
+          FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
+        run: flyctl deploy --remote-only --wait-timeout 600
