@@ -286,4 +286,169 @@ describe("MCP Server - Tutorial Mode", () => {
       expect(text).toContain("Error");
     });
   });
+
+  describe("session tracking", () => {
+    it("faucet records the acquired account against the session", async () => {
+      (ctx.mockAccountsManager.acquireAccount as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
+        pk: "B62qsess1",
+        sk: "EKsess1",
+      });
+
+      await ctx.client.callTool({ name: "faucet", arguments: {} });
+
+      const sessionIds = ctx.tracker.sessionIds();
+      expect(sessionIds).toHaveLength(1);
+      const tracked = ctx.tracker.getSessionAccounts(sessionIds[0]);
+      expect(tracked.map((a) => a.pk)).toEqual(["B62qsess1"]);
+    });
+
+    it("return_account untracks on success", async () => {
+      (ctx.mockAccountsManager.acquireAccount as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
+        pk: "B62qreturn",
+        sk: "EKreturn",
+      });
+      (ctx.mockAccountsManager.releaseAccount as ReturnType<typeof vi.fn>).mockResolvedValueOnce(undefined);
+
+      await ctx.client.callTool({ name: "faucet", arguments: {} });
+      await ctx.client.callTool({
+        name: "return_account",
+        arguments: { pk: "B62qreturn", sk: "EKreturn" },
+      });
+
+      expect(ctx.tracker.sessionIds()).toEqual([]);
+    });
+
+    it("reset_session releases every account this session holds", async () => {
+      const acquireMock = ctx.mockAccountsManager.acquireAccount as ReturnType<typeof vi.fn>;
+      acquireMock
+        .mockResolvedValueOnce({ pk: "B62qreset1", sk: "EKreset1" })
+        .mockResolvedValueOnce({ pk: "B62qreset2", sk: "EKreset2" });
+
+      await ctx.client.callTool({ name: "faucet", arguments: {} });
+      await ctx.client.callTool({ name: "faucet", arguments: {} });
+
+      const releaseMock = ctx.mockAccountsManager.releaseAccount as ReturnType<typeof vi.fn>;
+      releaseMock.mockResolvedValue(undefined);
+
+      const result = await ctx.client.callTool({ name: "reset_session", arguments: {} });
+      const text = (result.content as Array<{ type: string; text: string }>)[0].text;
+      expect(text).toContain("Released 2");
+      expect(releaseMock).toHaveBeenCalledTimes(2);
+      expect(ctx.tracker.sessionIds()).toEqual([]);
+    });
+  });
+
+  describe("freeze tools", () => {
+    it("freeze_reset pauses the chain-reset janitor and surfaces remaining time", async () => {
+      const result = await ctx.client.callTool({ name: "freeze_reset", arguments: { minutes: 30 } });
+      const text = (result.content as Array<{ type: string; text: string }>)[0].text;
+      const status = JSON.parse(text);
+      expect(status.frozen).toBe(true);
+      expect(status.remainingMs).toBeGreaterThan(0);
+      expect(status.remainingMs).toBeLessThanOrEqual(30 * 60_000);
+      expect(ctx.resetController.isFrozen()).toBe(true);
+    });
+
+    it("unfreeze_reset clears an active freeze immediately", async () => {
+      ctx.resetController.freeze(60 * 60_000);
+      expect(ctx.resetController.isFrozen()).toBe(true);
+
+      const result = await ctx.client.callTool({ name: "unfreeze_reset", arguments: {} });
+      const text = (result.content as Array<{ type: string; text: string }>)[0].text;
+      expect(JSON.parse(text)).toEqual({ frozen: false, frozenUntil: null, remainingMs: null });
+      expect(ctx.resetController.isFrozen()).toBe(false);
+    });
+
+    it("freeze_status reports the current state", async () => {
+      const before = await ctx.client.callTool({ name: "freeze_status", arguments: {} });
+      const beforeText = (before.content as Array<{ type: string; text: string }>)[0].text;
+      expect(JSON.parse(beforeText).frozen).toBe(false);
+
+      ctx.resetController.freeze(15 * 60_000);
+
+      const after = await ctx.client.callTool({ name: "freeze_status", arguments: {} });
+      const afterText = (after.content as Array<{ type: string; text: string }>)[0].text;
+      const status = JSON.parse(afterText);
+      expect(status.frozen).toBe(true);
+      expect(status.remainingMs).toBeGreaterThan(0);
+    });
+  });
+
+  describe("describe_state", () => {
+    it("returns a unified snapshot of chain, mempool, accounts, and reset state", async () => {
+      (ctx.mockGraphQL.query as ReturnType<typeof vi.fn>).mockImplementation(async (q: string) => {
+        if (q.includes("daemonStatus")) {
+          return { data: { daemonStatus: { syncStatus: "SYNCED", blockchainLength: 42, stateHash: "3NK..." } } };
+        }
+        if (q.includes("pooledUserCommands")) {
+          return { data: { pooledUserCommands: [{ hash: "Ckp1" }, { hash: "Ckp2" }] } };
+        }
+        return { data: {} };
+      });
+      (ctx.mockAccountsManager.listAcquiredAccounts as ReturnType<typeof vi.fn>).mockResolvedValueOnce([
+        { pk: "B62qserver1", sk: "EK1" },
+        { pk: "B62qserver2", sk: "EK2" },
+        { pk: "B62qserver3", sk: "EK3" },
+      ]);
+      (ctx.mockAccountsManager.acquireAccount as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
+        pk: "B62qmine",
+        sk: "EKmine",
+      });
+
+      await ctx.client.callTool({ name: "faucet", arguments: {} });
+
+      const result = await ctx.client.callTool({ name: "describe_state", arguments: {} });
+      const text = (result.content as Array<{ type: string; text: string }>)[0].text;
+      const snapshot = JSON.parse(text);
+
+      expect(snapshot.mode).toBe("tutorial");
+      expect(snapshot.chain.syncStatus).toBe("SYNCED");
+      expect(snapshot.chain.blockchainLength).toBe(42);
+      expect(snapshot.mempool.size).toBe(2);
+      expect(snapshot.accounts.acquired).toBe(3);
+      expect(snapshot.accounts.thisSession).toBe(1);
+      expect(snapshot.reset.frozen).toBe(false);
+      expect(Array.isArray(snapshot.hints)).toBe(true);
+      expect(snapshot.hints.length).toBeGreaterThan(0);
+    });
+
+    it("captures partial failures without losing other fields", async () => {
+      (ctx.mockGraphQL.query as ReturnType<typeof vi.fn>).mockRejectedValue(new Error("daemon offline"));
+      (ctx.mockAccountsManager.listAcquiredAccounts as ReturnType<typeof vi.fn>).mockResolvedValueOnce([]);
+
+      const result = await ctx.client.callTool({ name: "describe_state", arguments: {} });
+      const text = (result.content as Array<{ type: string; text: string }>)[0].text;
+      const snapshot = JSON.parse(text);
+
+      expect(snapshot.chain.error).toContain("daemon offline");
+      expect(snapshot.mempool.error).toContain("daemon offline");
+      expect(snapshot.accounts.acquired).toBe(0);
+      expect(snapshot.reset.frozen).toBe(false);
+      expect(snapshot.hints.length).toBeGreaterThan(0);
+    });
+  });
+
+  describe("examples", () => {
+    it("list_examples in tutorial mode includes tutorial-only workflows by default", async () => {
+      const result = await ctx.client.callTool({ name: "list_examples", arguments: {} });
+      const text = (result.content as Array<{ type: string; text: string }>)[0].text;
+      const items = JSON.parse(text) as Array<{ name: string; mode: string }>;
+      expect(items.some((e) => e.name === "send_payment")).toBe(true);
+      expect(items.some((e) => e.name === "look_up_account")).toBe(true);
+      for (const e of items) expect(["tutorial", "both"]).toContain(e.mode);
+    });
+
+    it("get_example returns the full send_payment workflow with named placeholders", async () => {
+      const result = await ctx.client.callTool({
+        name: "get_example",
+        arguments: { name: "send_payment" },
+      });
+      const text = (result.content as Array<{ type: string; text: string }>)[0].text;
+      const example = JSON.parse(text);
+      expect(example.name).toBe("send_payment");
+      expect(example.steps.some((s: { tool: string }) => s.tool === "send_payment")).toBe(true);
+      const placeholders = JSON.stringify(example);
+      expect(placeholders).toContain("$sender_pk");
+    });
+  });
 });

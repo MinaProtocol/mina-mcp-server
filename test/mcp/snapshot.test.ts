@@ -36,12 +36,19 @@ describe("MCP Server - Snapshot Mode", () => {
         "get_tracked_accounts",
         "get_transaction",
         "get_transaction_status",
+        "describe_state",
+        "freeze_reset",
+        "get_example",
+        "list_examples",
+        "freeze_status",
         "list_blocks",
         "query_archive_sql",
+        "reset_session",
         "return_account",
         "search_transactions",
         "send_delegation",
         "send_payment",
+        "unfreeze_reset",
       ].sort());
     });
 
@@ -334,6 +341,79 @@ describe("MCP Server - Snapshot Mode", () => {
       });
       const text = (result.content as Array<{ type: string; text: string }>)[0].text;
       expect(text).toContain("tutorial mode");
+    });
+
+    it("reset_session should return tutorial-only message", async () => {
+      const result = await ctx.client.callTool({ name: "reset_session", arguments: {} });
+      const text = (result.content as Array<{ type: string; text: string }>)[0].text;
+      expect(text).toContain("tutorial mode");
+    });
+
+    it("freeze_reset should return tutorial-only message", async () => {
+      const result = await ctx.client.callTool({ name: "freeze_reset", arguments: { minutes: 30 } });
+      const text = (result.content as Array<{ type: string; text: string }>)[0].text;
+      expect(text).toContain("tutorial mode");
+    });
+
+    it("unfreeze_reset should return tutorial-only message", async () => {
+      const result = await ctx.client.callTool({ name: "unfreeze_reset", arguments: {} });
+      const text = (result.content as Array<{ type: string; text: string }>)[0].text;
+      expect(text).toContain("tutorial mode");
+    });
+
+    it("freeze_status should return tutorial-only message", async () => {
+      const result = await ctx.client.callTool({ name: "freeze_status", arguments: {} });
+      const text = (result.content as Array<{ type: string; text: string }>)[0].text;
+      expect(text).toContain("tutorial mode");
+    });
+
+    it("describe_state should return tutorial-only message", async () => {
+      const result = await ctx.client.callTool({ name: "describe_state", arguments: {} });
+      const text = (result.content as Array<{ type: string; text: string }>)[0].text;
+      expect(text).toContain("tutorial mode");
+    });
+  });
+
+  describe("examples", () => {
+    it("list_examples in snapshot mode hides tutorial-only workflows by default", async () => {
+      const result = await ctx.client.callTool({ name: "list_examples", arguments: {} });
+      const text = (result.content as Array<{ type: string; text: string }>)[0].text;
+      const items = JSON.parse(text) as Array<{ name: string; mode: string }>;
+      expect(items.length).toBeGreaterThan(0);
+      for (const e of items) expect(["snapshot", "both"]).toContain(e.mode);
+      expect(items.some((e) => e.name === "send_payment")).toBe(false);
+      expect(items.some((e) => e.name === "look_up_account")).toBe(true);
+    });
+
+    it("list_examples with include='all' shows tutorial-only workflows too", async () => {
+      const result = await ctx.client.callTool({
+        name: "list_examples",
+        arguments: { include: "all" },
+      });
+      const text = (result.content as Array<{ type: string; text: string }>)[0].text;
+      const items = JSON.parse(text) as Array<{ name: string; mode: string }>;
+      expect(items.some((e) => e.name === "send_payment")).toBe(true);
+    });
+
+    it("get_example returns the full workflow", async () => {
+      const result = await ctx.client.callTool({
+        name: "get_example",
+        arguments: { name: "look_up_account" },
+      });
+      const text = (result.content as Array<{ type: string; text: string }>)[0].text;
+      const example = JSON.parse(text);
+      expect(example.name).toBe("look_up_account");
+      expect(Array.isArray(example.steps)).toBe(true);
+    });
+
+    it("get_example with unknown name returns a helpful list", async () => {
+      const result = await ctx.client.callTool({
+        name: "get_example",
+        arguments: { name: "nope" },
+      });
+      const text = (result.content as Array<{ type: string; text: string }>)[0].text;
+      expect(text).toContain("Unknown example 'nope'");
+      expect(text).toContain("send_payment");
     });
   });
 });
