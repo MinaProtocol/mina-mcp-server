@@ -1,0 +1,36 @@
+name: Deployed Smoke
+
+# Confirms the deployed MCP server is reachable, healthy, and responds to
+# real MCP traffic (initialize → tools/list → describe_state). Read-only —
+# no faucet / send_payment so it's safe to run on a schedule.
+
+on:
+  schedule:
+    # 06:00 UTC daily — after most US/EU teams have logged off so a failure
+    # alerts but doesn't compete with developer work.
+    - cron: "0 6 * * *"
+  workflow_dispatch:
+    inputs:
+      mcp_url:
+        description: "MCP endpoint to smoke-test"
+        required: false
+        default: "https://mina-mcp-sandbox.fly.dev/mcp"
+  workflow_run:
+    # Pair with the deploy workflow once one exists; harmless until then.
+    workflows: ["Deploy"]
+    types: [completed]
+
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    if: ${{ github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success' }}
+
+    env:
+      MCP_URL: ${{ github.event.inputs.mcp_url || vars.MCP_URL || 'https://mina-mcp-sandbox.fly.dev/mcp' }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Run smoke test
+        run: bash scripts/smoke.sh
