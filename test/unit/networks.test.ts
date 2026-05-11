@@ -35,6 +35,18 @@ describe("public network table", () => {
     expect(NETWORKS.mesa.archiveDumpCadence).toBe("twice-daily");
   });
 
+  it("devnet and mesa declare a faucet URL; mainnet does not", () => {
+    expect(NETWORKS.devnet.faucetUrl).toMatch(/^https?:\/\//);
+    expect(NETWORKS.mesa.faucetUrl).toMatch(/^https?:\/\//);
+    expect(NETWORKS.mainnet.faucetUrl).toBeUndefined();
+  });
+
+  it("every network declares a Mina-Rosetta endpoint", () => {
+    for (const cfg of Object.values(NETWORKS)) {
+      expect(cfg.rosettaUrl).toMatch(/^https?:\/\//);
+    }
+  });
+
   it("preflightWarning returns a warning for preflight networks and null otherwise", () => {
     expect(preflightWarning(NETWORKS.devnet)).toBeNull();
     expect(preflightWarning(NETWORKS.mainnet)).toBeNull();

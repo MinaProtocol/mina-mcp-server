@@ -2,7 +2,25 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { AnyProvider, Mode } from "../server-factory.js";
 import { TutorialProvider } from "../providers/tutorial.js";
 import { LiveProvider } from "../providers/live.js";
+import { NetworkConfig } from "../networks.js";
 import { STDIO_SESSION_ID } from "../session/tracker.js";
+
+function faucetHint(cfg: NetworkConfig): string | null {
+  if (!cfg.faucetUrl) return null;
+  return (
+    `If a human user needs test MINA on ${cfg.name}, direct them to ${cfg.faucetUrl} — ` +
+    `it is a web form, not an API, so the agent cannot call it directly.`
+  );
+}
+
+function rosettaHint(cfg: NetworkConfig): string | null {
+  if (!cfg.rosettaUrl) return null;
+  return (
+    `A Mina-Rosetta endpoint for ${cfg.name} is available at ${cfg.rosettaUrl} ` +
+    `(Coinbase Rosetta spec). This MCP server does not proxy it; surface it to ` +
+    `the user if they need standardized block/account/balance/construction APIs.`
+  );
+}
 
 const TUTORIAL_HINTS = [
   "Call `faucet` to acquire a pre-funded test account (1550 MINA, ready to sign).",
@@ -89,6 +107,8 @@ export function registerStateTools(
 
       if (provider instanceof LiveProvider) {
         const isPreflight = provider.network.stability === "preflight";
+        const faucet = faucetHint(provider.network);
+        const rosetta = rosettaHint(provider.network);
         const snapshot: LiveSnapshot = {
           mode: "live",
           network: {
@@ -99,9 +119,15 @@ export function registerStateTools(
           },
           chain: {},
           mempool: {},
-          // Lead with the preflight warning so an LLM consuming describe_state
-          // sees it before generic hints.
-          hints: isPreflight ? [PREFLIGHT_HINT, ...LIVE_HINTS] : LIVE_HINTS,
+          // Order: preflight warning first (loudest signal), generic live
+          // hints, then per-network pointers (faucet, then Rosetta) if we
+          // have them.
+          hints: [
+            ...(isPreflight ? [PREFLIGHT_HINT] : []),
+            ...LIVE_HINTS,
+            ...(faucet ? [faucet] : []),
+            ...(rosetta ? [rosetta] : []),
+          ],
         };
         if (chainResult.status === "fulfilled") {
           const status = (chainResult.value as { daemonStatus?: Record<string, unknown> } | null)?.daemonStatus ?? {};

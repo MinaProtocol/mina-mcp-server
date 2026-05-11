@@ -92,6 +92,14 @@ Endpoints are best-effort services without SLAs and URLs are subject to change. 
 
 When a `LiveProvider` is constructed against a preflight network, the server emits a `[WARN] Network '<name>' is a PREFLIGHT network…` line at startup and prepends a `PREFLIGHT` hint to `describe_state`'s `hints[]` — so any LLM consuming the output sees the caveat before reasoning about the data. If you build downstream automation against a preflight network, treat any data you gather as ephemeral and have a fallback to a stable network.
 
+Each network also carries optional pointers that the MCP server doesn't proxy itself but surfaces via `describe_state.hints[]` so an LLM can hand them to a human or a Rosetta-aware client:
+
+| Network | Faucet | Rosetta |
+|---|---|---|
+| `devnet` | https://faucet.minaprotocol.com | https://devnet-rosetta.gcp.o1test.net |
+| `mainnet` | _(none — exchanges only)_ | https://mainnet-rosetta.gcp.o1test.net |
+| `mesa` | https://faucet.minaprotocol.com | https://rosetta.mina-mesa-network.gcp.o1test.net |
+
 ### Snapshot mode against other public networks
 
 The `--profile download` path of `docker-compose.snapshot.yml` fetches dumps from the public bucket `https://storage.googleapis.com/mina-archive-dumps`. The URL layout is `<prefix>-<YYYY-MM-DD>_<HOUR>.sql.tar.gz`. To target a different network, override `ARCHIVE_DUMP_PREFIX`:
