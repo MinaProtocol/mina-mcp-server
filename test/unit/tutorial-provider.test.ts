@@ -98,6 +98,30 @@ describe("TutorialProvider", () => {
 
       await expect(provider.getAccountLive("B62qbad")).rejects.toThrow("Account not found");
     });
+
+    it("defaults token to the MINA token id when caller omits it (issue #5)", async () => {
+      // Regression: the daemon resolver rejects requests where token is
+      // undefined; JSON.stringify drops undefined keys, leaving the variable
+      // entirely missing from the body. Default to the canonical MINA id.
+      (mockGraphql.query as ReturnType<typeof vi.fn>).mockResolvedValueOnce({ data: { account: null } });
+
+      await provider.getAccountLive("B62qtest");
+
+      const callArgs = (mockGraphql.query as ReturnType<typeof vi.fn>).mock.calls[0];
+      expect(callArgs[1]).toEqual({ publicKey: "B62qtest", token: "1" });
+    });
+
+    it("passes through an explicit token unchanged", async () => {
+      (mockGraphql.query as ReturnType<typeof vi.fn>).mockResolvedValueOnce({ data: { account: null } });
+
+      await provider.getAccountLive("B62qtest", "wSHV2S4qX9jFsLjQo8r1BsMLH2ZRKsZx6EJd1sbozGPieEC4Jf");
+
+      const callArgs = (mockGraphql.query as ReturnType<typeof vi.fn>).mock.calls[0];
+      expect(callArgs[1]).toEqual({
+        publicKey: "B62qtest",
+        token: "wSHV2S4qX9jFsLjQo8r1BsMLH2ZRKsZx6EJd1sbozGPieEC4Jf",
+      });
+    });
   });
 
   describe("sendPayment", () => {

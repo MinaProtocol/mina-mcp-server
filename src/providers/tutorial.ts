@@ -42,8 +42,14 @@ export class TutorialProvider extends SnapshotProvider {
     return result.data;
   }
 
+  // "1" is the canonical MINA token id; the daemon resolver rejects undefined here.
+  static readonly MINA_TOKEN_ID = "1";
+
   async getAccountLive(publicKey: string, token?: string) {
-    const result = await this.graphql.query(QUERIES.account, { publicKey, token });
+    const result = await this.graphql.query(QUERIES.account, {
+      publicKey,
+      token: token ?? TutorialProvider.MINA_TOKEN_ID,
+    });
     if (result.errors) throw new Error(result.errors[0].message);
     return (result.data as Record<string, unknown>)?.account ?? null;
   }
