@@ -12,6 +12,7 @@ import { registerTestAccountTools } from "./tools/test-accounts.js";
 import { registerAdminTools } from "./tools/admin.js";
 import { registerStateTools } from "./tools/state.js";
 import { registerExampleTools } from "./tools/examples.js";
+import { registerRosettaTools } from "./tools/rosetta.js";
 
 export type Mode = "snapshot" | "tutorial" | "live";
 
@@ -30,5 +31,6 @@ export function buildMcpServer(provider: AnyProvider, mode: Mode): McpServer {
   registerAdminTools(server, getProvider, mode);
   registerStateTools(server, getProvider, mode);
   registerExampleTools(server, getProvider, mode);
+  registerRosettaTools(server, getProvider, mode);
   return server;
 }

@@ -3,6 +3,7 @@ import { ArchiveNodeAPI } from "../graphql/archive-api.js";
 import { ArchiveDB } from "../db/archive.js";
 import { TutorialProvider } from "./tutorial.js";
 import { NetworkConfig, preflightWarning } from "../networks.js";
+import { RosettaClient } from "../rosetta/client.js";
 
 /**
  * Read-only provider that points at a public Mina network (devnet, mainnet, mesa)
@@ -14,6 +15,9 @@ import { NetworkConfig, preflightWarning } from "../networks.js";
 export class LiveProvider extends TutorialProvider {
   public readonly network: NetworkConfig;
   public override readonly mode: string = "live";
+  // Optional — present when network.rosettaUrl + rosettaNetwork are both set.
+  // rosetta_* tools are only registered when this is non-null.
+  public readonly rosetta: RosettaClient | null;
 
   constructor(network: NetworkConfig) {
     // Stub ArchiveDB — pool is lazy and never queried because DB-backed tools
@@ -24,6 +28,13 @@ export class LiveProvider extends TutorialProvider {
     const archiveApi = new ArchiveNodeAPI(network.archiveNodeApi);
     super(stubDb as unknown as ArchiveDB, graphql, archiveApi);
     this.network = network;
+    this.rosetta =
+      network.rosettaUrl && network.rosettaNetwork
+        ? new RosettaClient(network.rosettaUrl, {
+            blockchain: "mina",
+            network: network.rosettaNetwork,
+          })
+        : null;
     const warning = preflightWarning(network);
     if (warning) console.error(warning);
   }

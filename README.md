@@ -92,6 +92,20 @@ Endpoints are best-effort services without SLAs and URLs are subject to change. 
 
 When a `LiveProvider` is constructed against a preflight network, the server emits a `[WARN] Network '<name>' is a PREFLIGHT network…` line at startup and prepends a `PREFLIGHT` hint to `describe_state`'s `hints[]` — so any LLM consuming the output sees the caveat before reasoning about the data. If you build downstream automation against a preflight network, treat any data you gather as ephemeral and have a fallback to a stable network.
 
+### Rosetta Data API (live mode)
+
+When a live-mode network has a Rosetta endpoint configured (all three public networks do today), the server registers five Rosetta Data API tools alongside the daemon/archive ones. These return responses in **standardized Rosetta format** — useful for LLMs and integrations that already speak Rosetta:
+
+| Tool | Rosetta endpoint | Use |
+|---|---|---|
+| `rosetta_status` | `POST /network/status` | Current / genesis / oldest block, sync state |
+| `rosetta_account` | `POST /account/balance` | Balance for an address, optionally at a specific block |
+| `rosetta_block` | `POST /block` | Full block (with operations) by index or hash |
+| `rosetta_mempool` | `POST /mempool` | Pending transaction identifiers |
+| `rosetta_mempool_transaction` | `POST /mempool/transaction` | A single pending tx with operations |
+
+Construction API (offline signing flow) is intentionally not included in this set; it's a follow-up with its own tool-shape design (macro-vs-literal).
+
 Each network also carries optional pointers that the MCP server doesn't proxy itself but surfaces via `describe_state.hints[]` so an LLM can hand them to a human or a Rosetta-aware client:
 
 | Network | Faucet | Rosetta |

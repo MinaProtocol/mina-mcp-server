@@ -6,6 +6,7 @@ import { SnapshotProvider } from "../../src/providers/snapshot.js";
 import { TutorialProvider } from "../../src/providers/tutorial.js";
 import { LiveProvider } from "../../src/providers/live.js";
 import { resolveNetwork, NetworkName } from "../../src/networks.js";
+import { RosettaClient } from "../../src/rosetta/client.js";
 import { ArchiveDB } from "../../src/db/archive.js";
 import { GraphQLClient } from "../../src/graphql/client.js";
 import { ArchiveNodeAPI } from "../../src/graphql/archive-api.js";
@@ -22,6 +23,7 @@ import { registerTestAccountTools } from "../../src/tools/test-accounts.js";
 import { registerAdminTools } from "../../src/tools/admin.js";
 import { registerStateTools } from "../../src/tools/state.js";
 import { registerExampleTools } from "../../src/tools/examples.js";
+import { registerRosettaTools } from "../../src/tools/rosetta.js";
 
 export function createMockDb() {
   return {
@@ -122,16 +124,33 @@ export interface LiveMcpTestContext {
   provider: LiveProvider;
   mockGraphQL: GraphQLClient;
   mockArchiveApi: ArchiveNodeAPI;
+  mockRosetta: RosettaClient;
   cleanup: () => Promise<void>;
+}
+
+export function createMockRosetta(): RosettaClient {
+  return {
+    networkList: vi.fn().mockResolvedValue({ network_identifiers: [{ blockchain: "mina", network: "devnet" }] }),
+    networkStatus: vi.fn().mockResolvedValue({}),
+    accountBalance: vi.fn().mockResolvedValue({}),
+    block: vi.fn().mockResolvedValue({}),
+    mempool: vi.fn().mockResolvedValue({ transaction_identifiers: [] }),
+    mempoolTransaction: vi.fn().mockResolvedValue({}),
+    isConnected: vi.fn().mockResolvedValue(true),
+    getEndpoint: vi.fn().mockReturnValue("https://rosetta.test"),
+    getNetworkIdentifier: vi.fn().mockReturnValue({ blockchain: "mina", network: "devnet" }),
+  } as unknown as RosettaClient;
 }
 
 export async function setupLiveMcp(networkName: NetworkName = "devnet"): Promise<LiveMcpTestContext> {
   const mockGraphQL = createMockGraphQL();
   const mockArchiveApi = createMockArchiveApi();
+  const mockRosetta = createMockRosetta();
   const provider = new LiveProvider(resolveNetwork(networkName));
   // Swap in mocks so tests don't reach the public network.
   (provider as unknown as { graphql: GraphQLClient }).graphql = mockGraphQL;
   (provider as unknown as { archiveApi: ArchiveNodeAPI }).archiveApi = mockArchiveApi;
+  (provider as unknown as { rosetta: RosettaClient }).rosetta = mockRosetta;
 
   const server = new McpServer({ name: "mina-live-test", version: "0.1.0" });
   const getProvider = () => provider;
@@ -146,6 +165,7 @@ export async function setupLiveMcp(networkName: NetworkName = "devnet"): Promise
   registerAdminTools(server, getProvider, "live");
   registerStateTools(server, getProvider, "live");
   registerExampleTools(server, getProvider, "live");
+  registerRosettaTools(server, getProvider, "live");
 
   const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
   const client = new Client({ name: "test-client", version: "0.1.0" });
@@ -158,6 +178,7 @@ export async function setupLiveMcp(networkName: NetworkName = "devnet"): Promise
     provider,
     mockGraphQL,
     mockArchiveApi,
+    mockRosetta,
     cleanup: async () => {
       await client.close();
       await server.close();
