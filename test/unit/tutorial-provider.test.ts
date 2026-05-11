@@ -154,7 +154,9 @@ describe("TutorialProvider", () => {
       expect(dbCall[0]).toContain("height = $1");
       expect(dbCall[1]).toEqual([1281]);
       const gqlCall = (mockGraphql.query as ReturnType<typeof vi.fn>).mock.calls[0];
-      expect(gqlCall[1]).toEqual({ stateHash: "3NLookedUp", height: 1281 });
+      // Daemon enforces "exactly one of state hash, height" — pass only the
+      // resolved stateHash, with height: null.
+      expect(gqlCall[1]).toEqual({ stateHash: "3NLookedUp", height: null });
     });
 
     it("throws when archive DB has no block at the requested height", async () => {

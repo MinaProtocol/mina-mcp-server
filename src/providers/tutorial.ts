@@ -61,9 +61,10 @@ export class TutorialProvider extends SnapshotProvider {
   }
 
   async getBlockLive(stateHash?: string, height?: number) {
-    // The daemon's block resolver requires a non-null stateHash even when
-    // height is supplied (issue #4). When the caller passes only height,
-    // resolve to the matching block's state_hash via the archive DB first.
+    // The daemon's block resolver enforces "exactly one of state hash, height".
+    // When only height is supplied, resolve it to a state_hash via the archive
+    // DB (issue #4) and then call the daemon with stateHash only — passing
+    // both at once trips the daemon's exactly-one check.
     let resolvedStateHash = stateHash;
     if (!resolvedStateHash && typeof height === "number") {
       const row = await this.db.query<{ state_hash: string }>(
@@ -78,12 +79,12 @@ export class TutorialProvider extends SnapshotProvider {
       }
       resolvedStateHash = row.rows[0].state_hash;
     }
-    if (!resolvedStateHash && height === undefined) {
+    if (!resolvedStateHash) {
       throw new Error("Provide either stateHash or height");
     }
     const result = await this.graphql.query(QUERIES.block, {
-      stateHash: resolvedStateHash ?? null,
-      height: height ?? null,
+      stateHash: resolvedStateHash,
+      height: null,
     });
     if (result.errors) throw new Error(result.errors[0].message);
     return (result.data as Record<string, unknown>)?.block ?? null;
