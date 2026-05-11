@@ -86,6 +86,7 @@ describe("MCP Server - Live Mode", () => {
 
       expect(snapshot.mode).toBe("live");
       expect(snapshot.network.name).toBe("devnet");
+      expect(snapshot.network.stability).toBe("stable");
       expect(snapshot.network.daemonGraphql).toMatch(/^https?:\/\//);
       expect(snapshot.network.archiveNodeApi).toMatch(/^https?:\/\//);
       expect(snapshot.chain.syncStatus).toBe("SYNCED");
@@ -93,9 +94,36 @@ describe("MCP Server - Live Mode", () => {
       expect(snapshot.mempool.size).toBe(0);
       expect(Array.isArray(snapshot.hints)).toBe(true);
       expect(snapshot.hints.some((h: string) => h.includes("public read-only"))).toBe(true);
+      // Stable network should NOT carry a preflight warning.
+      expect(snapshot.hints.some((h: string) => h.includes("PREFLIGHT"))).toBe(false);
       // Live-mode snapshot intentionally omits accounts + reset (those don't exist here).
       expect("accounts" in snapshot).toBe(false);
       expect("reset" in snapshot).toBe(false);
+    });
+  });
+
+  describe("preflight network (mesa)", () => {
+    it("describe_state surfaces stability='preflight' and leads with a PREFLIGHT hint", async () => {
+      // Replace the default devnet fixture with a mesa one.
+      await ctx.cleanup();
+      const { setupLiveMcp } = await import("./helpers.js");
+      const mesaCtx = await setupLiveMcp("mesa");
+      try {
+        (mesaCtx.mockGraphQL.query as ReturnType<typeof vi.fn>)
+          .mockResolvedValueOnce({ data: { daemonStatus: { syncStatus: "SYNCED", blockchainLength: 7000, stateHash: "3NKmesa" } } })
+          .mockResolvedValueOnce({ data: { pooledUserCommands: [] } });
+
+        const result = await mesaCtx.client.callTool({ name: "describe_state", arguments: {} });
+        const text = (result.content as Array<{ type: string; text: string }>)[0].text;
+        const snapshot = JSON.parse(text);
+
+        expect(snapshot.network.name).toBe("mesa");
+        expect(snapshot.network.stability).toBe("preflight");
+        // First hint MUST be the preflight warning so it shows up on the first scan.
+        expect(snapshot.hints[0]).toMatch(/PREFLIGHT/);
+      } finally {
+        await mesaCtx.cleanup();
+      }
     });
   });
 

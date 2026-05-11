@@ -55,8 +55,9 @@ npm run build
 # Option A: Snapshot mode (read-only, from local dump)
 SNAPSHOT_DIR=./snapshots/devnet-latest docker compose -f docker-compose.snapshot.yml up -d
 
-# Option B: Snapshot mode (download latest devnet dump)
+# Option B: Snapshot mode (download latest dump from GCS — devnet by default)
 docker compose -f docker-compose.snapshot.yml --profile download up -d
+#   See "Snapshot mode against other public networks" below for mainnet/mesa.
 
 # Option C: Tutorial mode (full lightnet)
 docker compose -f docker-compose.tutorial.yml up -d
@@ -81,7 +82,37 @@ npm start -- --mode live --network devnet     # or mainnet, mesa
 MINA_MCP_MODE=live MINA_MCP_NETWORK=devnet npm start
 ```
 
-The currently supported public networks are `devnet`, `mainnet`, and `mesa`. Endpoints are best-effort services without SLAs and the URLs are subject to change.
+Endpoints are best-effort services without SLAs and URLs are subject to change. Networks are classified by **stability tier**:
+
+| Network | Stability | What it means |
+|---|---|---|
+| `devnet` | stable | Long-lived dev network. Expected to stick around. |
+| `mainnet` | stable | Production. Expected to stick around. |
+| `mesa` | **preflight** | Preview/staging network. **May be reset, renamed, or retired without notice.** Endpoints, archive-dump filenames, and even the network identity itself are not guaranteed stable. |
+
+When a `LiveProvider` is constructed against a preflight network, the server emits a `[WARN] Network '<name>' is a PREFLIGHT network…` line at startup and prepends a `PREFLIGHT` hint to `describe_state`'s `hints[]` — so any LLM consuming the output sees the caveat before reasoning about the data. If you build downstream automation against a preflight network, treat any data you gather as ephemeral and have a fallback to a stable network.
+
+### Snapshot mode against other public networks
+
+The `--profile download` path of `docker-compose.snapshot.yml` fetches dumps from the public bucket `https://storage.googleapis.com/mina-archive-dumps`. The URL layout is `<prefix>-<YYYY-MM-DD>_<HOUR>.sql.tar.gz`. To target a different network, override `ARCHIVE_DUMP_PREFIX`:
+
+| Network | Prefix | Cadence | Recent size |
+|---|---|---|---|
+| devnet (default) | `devnet-archive-dump` | daily, `_0000` UTC | ~370 MB compressed |
+| mainnet | `mainnet-archive-dump` | daily, `_0000` UTC | ~1.5 GB compressed |
+| mesa (**preflight**) | `hetzner-pre-mesa-1-archive-dump` | twice daily, `_0000` + `_1200` UTC | ~32 MB compressed |
+
+```bash
+# Mainnet snapshot
+ARCHIVE_DUMP_PREFIX=mainnet-archive-dump \
+  docker compose -f docker-compose.snapshot.yml --profile download up -d
+
+# Mesa snapshot (preflight — see warning below)
+ARCHIVE_DUMP_PREFIX=hetzner-pre-mesa-1-archive-dump ARCHIVE_DUMP_HOUR=1200 \
+  docker compose -f docker-compose.snapshot.yml --profile download up -d
+```
+
+> **Mesa is a preflight network.** The dump prefix above is internal ops naming and is **not a stable convention** — it may change or stop being published without notice when mesa graduates or is retired. Treat snapshot data from mesa as ephemeral.
 
 In live mode the server hides every tool that would need infra it doesn't have:
 

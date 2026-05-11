@@ -169,12 +169,22 @@ async function main() {
       process.once("beforeExit", onExit("beforeExit"));
     }
 
-    const suffix = mode === "live" ? ` (network: ${network})` : "";
-    console.error(`Mina MCP server started in ${mode} mode (stdio)${suffix}`);
+    const liveSuffix = () => {
+      if (mode !== "live") return "";
+      const cfg = (provider as LiveProvider).network;
+      const tag = cfg.stability === "preflight" ? `${network} [PREFLIGHT]` : `${network}`;
+      return ` (network: ${tag})`;
+    };
+    console.error(`Mina MCP server started in ${mode} mode (stdio)${liveSuffix()}`);
   } else {
     const httpServer = await startHttpServer({ port: httpPort, provider, mode });
-    const suffix = mode === "live" ? ` (network: ${network})` : "";
-    console.error(`Mina MCP server started in ${mode} mode (http) on :${httpServer.port}${suffix}`);
+    const liveSuffix = () => {
+      if (mode !== "live") return "";
+      const cfg = (provider as LiveProvider).network;
+      const tag = cfg.stability === "preflight" ? `${network} [PREFLIGHT]` : `${network}`;
+      return ` (network: ${tag})`;
+    };
+    console.error(`Mina MCP server started in ${mode} mode (http) on :${httpServer.port}${liveSuffix()}`);
     console.error(`  POST /mcp        — JSON-RPC requests (use Mcp-Session-Id header)`);
     console.error(`  GET  /mcp        — SSE stream`);
     console.error(`  GET  /health     — liveness/health`);

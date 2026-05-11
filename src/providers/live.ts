@@ -2,7 +2,7 @@ import { GraphQLClient } from "../graphql/client.js";
 import { ArchiveNodeAPI } from "../graphql/archive-api.js";
 import { ArchiveDB } from "../db/archive.js";
 import { TutorialProvider } from "./tutorial.js";
-import { NetworkConfig } from "../networks.js";
+import { NetworkConfig, preflightWarning } from "../networks.js";
 
 /**
  * Read-only provider that points at a public Mina network (devnet, mainnet, mesa)
@@ -24,6 +24,8 @@ export class LiveProvider extends TutorialProvider {
     const archiveApi = new ArchiveNodeAPI(network.archiveNodeApi);
     super(stubDb as unknown as ArchiveDB, graphql, archiveApi);
     this.network = network;
+    const warning = preflightWarning(network);
+    if (warning) console.error(warning);
   }
 
   /**

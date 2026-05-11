@@ -23,6 +23,12 @@ const LIVE_HINTS = [
   "Use `get_mempool` to look at pending transactions on this public network.",
 ];
 
+const PREFLIGHT_HINT =
+  "WARNING: this network is a PREFLIGHT/preview network — it may be reset, " +
+  "renamed, or retired without notice. Endpoints and dump filenames are not " +
+  "guaranteed to remain stable. If you hit endpoint errors, fall back to a " +
+  "stable network (devnet or mainnet).";
+
 interface TutorialSnapshot {
   mode: string;
   chain: {
@@ -39,7 +45,12 @@ interface TutorialSnapshot {
 
 interface LiveSnapshot {
   mode: string;
-  network: { name: string; daemonGraphql: string; archiveNodeApi: string };
+  network: {
+    name: string;
+    stability: "stable" | "preflight";
+    daemonGraphql: string;
+    archiveNodeApi: string;
+  };
   chain: {
     syncStatus?: string;
     blockchainLength?: number | null;
@@ -77,16 +88,20 @@ export function registerStateTools(
       ]);
 
       if (provider instanceof LiveProvider) {
+        const isPreflight = provider.network.stability === "preflight";
         const snapshot: LiveSnapshot = {
           mode: "live",
           network: {
             name: provider.network.name,
+            stability: provider.network.stability,
             daemonGraphql: provider.network.daemonGraphql,
             archiveNodeApi: provider.network.archiveNodeApi,
           },
           chain: {},
           mempool: {},
-          hints: LIVE_HINTS,
+          // Lead with the preflight warning so an LLM consuming describe_state
+          // sees it before generic hints.
+          hints: isPreflight ? [PREFLIGHT_HINT, ...LIVE_HINTS] : LIVE_HINTS,
         };
         if (chainResult.status === "fulfilled") {
           const status = (chainResult.value as { daemonStatus?: Record<string, unknown> } | null)?.daemonStatus ?? {};
