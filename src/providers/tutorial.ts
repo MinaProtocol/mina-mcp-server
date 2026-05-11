@@ -61,7 +61,30 @@ export class TutorialProvider extends SnapshotProvider {
   }
 
   async getBlockLive(stateHash?: string, height?: number) {
-    const result = await this.graphql.query(QUERIES.block, { stateHash, height });
+    // The daemon's block resolver requires a non-null stateHash even when
+    // height is supplied (issue #4). When the caller passes only height,
+    // resolve to the matching block's state_hash via the archive DB first.
+    let resolvedStateHash = stateHash;
+    if (!resolvedStateHash && typeof height === "number") {
+      const row = await this.db.query<{ state_hash: string }>(
+        `SELECT state_hash FROM blocks
+         WHERE height = $1
+         ORDER BY (chain_status = 'canonical') DESC, id DESC
+         LIMIT 1`,
+        [height]
+      );
+      if (row.rows.length === 0) {
+        throw new Error(`No block found at height ${height} in archive DB`);
+      }
+      resolvedStateHash = row.rows[0].state_hash;
+    }
+    if (!resolvedStateHash && height === undefined) {
+      throw new Error("Provide either stateHash or height");
+    }
+    const result = await this.graphql.query(QUERIES.block, {
+      stateHash: resolvedStateHash ?? null,
+      height: height ?? null,
+    });
     if (result.errors) throw new Error(result.errors[0].message);
     return (result.data as Record<string, unknown>)?.block ?? null;
   }

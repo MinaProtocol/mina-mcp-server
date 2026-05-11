@@ -124,6 +124,55 @@ describe("TutorialProvider", () => {
     });
   });
 
+  describe("getBlockLive", () => {
+    it("passes through an explicit stateHash without archive lookup", async () => {
+      (mockGraphql.query as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
+        data: { block: { stateHash: "3NHash" } },
+      });
+
+      const result = await provider.getBlockLive("3NHash");
+
+      expect(result).toEqual({ stateHash: "3NHash" });
+      expect(mockDb.query).not.toHaveBeenCalled();
+      const call = (mockGraphql.query as ReturnType<typeof vi.fn>).mock.calls[0];
+      expect(call[1]).toEqual({ stateHash: "3NHash", height: null });
+    });
+
+    it("resolves height to a canonical state_hash via the archive DB first (issue #4)", async () => {
+      (mockDb.query as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
+        rows: [{ state_hash: "3NLookedUp" }],
+      });
+      (mockGraphql.query as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
+        data: { block: { stateHash: "3NLookedUp", height: 1281 } },
+      });
+
+      const result = await provider.getBlockLive(undefined, 1281);
+
+      expect(result).toMatchObject({ stateHash: "3NLookedUp" });
+      const dbCall = (mockDb.query as ReturnType<typeof vi.fn>).mock.calls[0];
+      expect(dbCall[0]).toContain("FROM blocks");
+      expect(dbCall[0]).toContain("height = $1");
+      expect(dbCall[1]).toEqual([1281]);
+      const gqlCall = (mockGraphql.query as ReturnType<typeof vi.fn>).mock.calls[0];
+      expect(gqlCall[1]).toEqual({ stateHash: "3NLookedUp", height: 1281 });
+    });
+
+    it("throws when archive DB has no block at the requested height", async () => {
+      (mockDb.query as ReturnType<typeof vi.fn>).mockResolvedValueOnce({ rows: [] });
+
+      await expect(provider.getBlockLive(undefined, 999999)).rejects.toThrow(
+        "No block found at height 999999"
+      );
+      expect(mockGraphql.query).not.toHaveBeenCalled();
+    });
+
+    it("throws when neither stateHash nor height is provided", async () => {
+      await expect(provider.getBlockLive()).rejects.toThrow(/stateHash or height/);
+      expect(mockDb.query).not.toHaveBeenCalled();
+      expect(mockGraphql.query).not.toHaveBeenCalled();
+    });
+  });
+
   describe("sendPayment", () => {
     it("should send payment via GraphQL mutation", async () => {
       const mockResult = { payment: { id: "pay1", hash: "txhash" } };
