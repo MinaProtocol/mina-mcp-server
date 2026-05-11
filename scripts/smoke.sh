@@ -83,9 +83,21 @@ done
 
 # 4. describe_state — live chain snapshot. The response is SSE-wrapped JSON
 # with the result text as an escaped JSON string, so we check for substrings
-# that don't depend on quote escaping.
+# that don't depend on quote escaping. Retry through the post-deploy cold
+# start window: the lightnet daemon takes ~30-60s to come up after the
+# container restarts, and describe_state returns chain.error in the
+# meantime instead of a usable syncStatus.
 echo "[describe_state]"
-STATE=$(mcp_call '{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"describe_state","arguments":{}}}')
+STATE=""
+for attempt in $(seq 1 6); do
+  STATE=$(mcp_call '{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"describe_state","arguments":{}}}')
+  if contains "$STATE" "syncStatus"; then
+    echo "  describe_state ready after ${attempt} attempt(s)"
+    break
+  fi
+  echo "  attempt ${attempt}/6: daemon not ready (state: ${STATE:0:120})"
+  sleep 20
+done
 require "describe_state mentions tutorial mode" 'contains "$STATE" "tutorial"'
 require "describe_state mentions chain"         'contains "$STATE" "chain"'
 require "describe_state mentions hints"         'contains "$STATE" "hints"'
