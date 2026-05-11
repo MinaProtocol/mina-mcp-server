@@ -64,7 +64,7 @@ export const QUERIES = {
           slot
           slotSinceGenesis
           blockCreator
-          coinbaseReceiverAccount { publicKey }
+          coinbaseReceiever
           stakingEpochData { epochLength }
         }
         previousStateHash
@@ -97,7 +97,7 @@ export const QUERIES = {
           slot
           slotSinceGenesis
           blockCreator
-          coinbaseReceiverAccount { publicKey }
+          coinbaseReceiever
         }
         previousStateHash
         blockchainState {
