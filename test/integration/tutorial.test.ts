@@ -47,13 +47,13 @@ describe("Tutorial Mode Integration - MCP Tools", () => {
     server = new McpServer({ name: "mina-tutorial-integration", version: "0.1.0" });
     const getProvider = () => provider;
 
-    registerAccountTools(server, getProvider);
-    registerBlockTools(server, getProvider);
-    registerTransactionTools(server, getProvider);
-    registerNetworkTools(server, getProvider);
-    registerSchemaTools(server, getProvider);
-    registerZkAppTools(server, getProvider);
-    registerTestAccountTools(server, getProvider);
+    registerAccountTools(server, getProvider, "tutorial");
+    registerBlockTools(server, getProvider, "tutorial");
+    registerTransactionTools(server, getProvider, "tutorial");
+    registerNetworkTools(server, getProvider, "tutorial");
+    registerSchemaTools(server, getProvider, "tutorial");
+    registerZkAppTools(server, getProvider, "tutorial");
+    registerTestAccountTools(server, getProvider, "tutorial");
 
     const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
     client = new Client({ name: "tutorial-test-client", version: "0.1.0" });

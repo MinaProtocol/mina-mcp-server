@@ -34,13 +34,13 @@ describe("Snapshot Mode Integration", () => {
     server = new McpServer({ name: "mina-snapshot-integration", version: "0.1.0" });
     const getProvider = () => provider;
 
-    registerAccountTools(server, getProvider);
-    registerBlockTools(server, getProvider);
-    registerTransactionTools(server, getProvider);
-    registerNetworkTools(server, getProvider);
-    registerSchemaTools(server, getProvider);
-    registerZkAppTools(server, getProvider);
-    registerTestAccountTools(server, getProvider);
+    registerAccountTools(server, getProvider, "snapshot");
+    registerBlockTools(server, getProvider, "snapshot");
+    registerTransactionTools(server, getProvider, "snapshot");
+    registerNetworkTools(server, getProvider, "snapshot");
+    registerSchemaTools(server, getProvider, "snapshot");
+    registerZkAppTools(server, getProvider, "snapshot");
+    registerTestAccountTools(server, getProvider, "snapshot");
 
     const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
     client = new Client({ name: "snapshot-test-client", version: "0.1.0" });
