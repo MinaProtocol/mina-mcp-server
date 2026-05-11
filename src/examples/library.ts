@@ -1,4 +1,14 @@
-export type ExampleMode = "snapshot" | "tutorial" | "both";
+export type ExampleMode = "snapshot" | "tutorial" | "live" | "both";
+
+// Examples runnable in live mode. "both" examples are also included if they
+// don't depend on the archive DB.
+const LIVE_RUNNABLE = new Set<string>([
+  "orient",
+  "browse_chain",
+  "look_up_account_live",
+  "explore_zkapp_events_live",
+  "browse_archive_blocks",
+]);
 
 export interface ExampleStep {
   tool: string;
@@ -21,6 +31,32 @@ export const EXAMPLES: Example[] = [
     mode: "tutorial",
     steps: [
       { tool: "describe_state", note: "Call this first in any new session." },
+    ],
+  },
+  {
+    name: "look_up_account_live",
+    summary: "Read a public-network account's balance and nonce live from the daemon.",
+    mode: "live",
+    steps: [
+      { tool: "get_account", args: { publicKey: "B62q..." }, note: "Replace publicKey with the account you care about." },
+    ],
+  },
+  {
+    name: "explore_zkapp_events_live",
+    summary: "Read events/actions for a deployed zkApp from the Archive-Node-API on a public network.",
+    mode: "live",
+    steps: [
+      { tool: "get_events", args: { address: "B62q...zkapp", status: "CANONICAL" } },
+      { tool: "get_actions", args: { address: "B62q...zkapp", status: "CANONICAL" } },
+    ],
+  },
+  {
+    name: "browse_archive_blocks",
+    summary: "List recent canonical blocks from the public Archive-Node-API and then fetch one by stateHash.",
+    mode: "live",
+    steps: [
+      { tool: "get_archive_blocks", args: { canonical: true, limit: 5 }, bind: { "blocks.0.stateHash": "$state_hash" } },
+      { tool: "get_block", args: { stateHash: "$state_hash" } },
     ],
   },
   {
@@ -176,7 +212,11 @@ export const EXAMPLES: Example[] = [
 ];
 
 export function listExamples(modeFilter: ExampleMode): Pick<Example, "name" | "summary" | "mode">[] {
-  return EXAMPLES.filter((e) => e.mode === "both" || e.mode === modeFilter).map((e) => ({
+  return EXAMPLES.filter((e) => {
+    if (e.mode === modeFilter) return true;
+    if (modeFilter === "live") return LIVE_RUNNABLE.has(e.name);
+    return e.mode === "both";
+  }).map((e) => ({
     name: e.name,
     summary: e.summary,
     mode: e.mode,

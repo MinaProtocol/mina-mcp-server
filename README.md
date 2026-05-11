@@ -62,10 +62,35 @@ docker compose -f docker-compose.snapshot.yml --profile download up -d
 docker compose -f docker-compose.tutorial.yml up -d
 # Wait ~1-2 min for the network to sync
 
+# Option D: Live mode (read-only, talks to a public Mina network — no local infra)
+#   Picks a network with --network (devnet, mainnet, mesa). Nothing else to start.
+
 # Run the MCP server
-MINA_MCP_MODE=snapshot npm start    # or
-MINA_MCP_MODE=tutorial npm start
+MINA_MCP_MODE=snapshot npm start                              # or
+MINA_MCP_MODE=tutorial npm start                              # or
+npm start -- --mode live --network devnet                     # no Postgres / lightnet needed
 ```
+
+### Live mode against a public Mina network
+
+Live mode is a thin read-only proxy that turns MCP tool calls into GraphQL/HTTP requests against the o1Labs-hosted public endpoints. There is **nothing to host** — run it locally next to your MCP client:
+
+```bash
+npm start -- --mode live --network devnet     # or mainnet, mesa
+# equivalently:
+MINA_MCP_MODE=live MINA_MCP_NETWORK=devnet npm start
+```
+
+The currently supported public networks are `devnet`, `mainnet`, and `mesa`. Endpoints are best-effort services without SLAs and the URLs are subject to change.
+
+In live mode the server hides every tool that would need infra it doesn't have:
+
+- no archive Postgres → no `query_archive_sql`, `get_archive_schema`, `list_blocks`, `search_transactions`, `get_transaction`, `get_staking_ledger`, `get_archive_stats`;
+- no accounts-manager / faucet → no `faucet`, `return_account`, `reset_session`;
+- no reset janitor → no `freeze_reset`, `unfreeze_reset`, `freeze_status`;
+- public daemons don't sign for you → no `send_payment`, `send_delegation`, `get_tracked_accounts`.
+
+`get_block` requires a `stateHash` in live mode — use `get_archive_blocks` (Archive-Node-API) to discover one first.
 
 ## Demo: end-to-end payment in tutorial mode
 
@@ -99,7 +124,8 @@ Key variables:
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `MINA_MCP_MODE` | `snapshot` | Server mode: `snapshot` or `tutorial` |
+| `MINA_MCP_MODE` | `snapshot` | Server mode: `snapshot`, `tutorial`, or `live` |
+| `MINA_MCP_NETWORK` | _(unset)_ | Required in live mode: `devnet`, `mainnet`, or `mesa` |
 | `ARCHIVE_DB_HOST` | `localhost` | Archive PostgreSQL host |
 | `ARCHIVE_DB_PORT` | `5432` | Archive PostgreSQL port |
 | `MINA_GRAPHQL_ENDPOINT` | `http://localhost:3085/graphql` | Mina daemon GraphQL (tutorial mode) |

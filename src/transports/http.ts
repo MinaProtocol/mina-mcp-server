@@ -3,9 +3,8 @@ import type { Server as HttpServer } from "node:http";
 import { randomUUID } from "node:crypto";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
-import { SnapshotProvider } from "../providers/snapshot.js";
 import { TutorialProvider } from "../providers/tutorial.js";
-import { Mode, buildMcpServer } from "../server-factory.js";
+import { AnyProvider, Mode, buildMcpServer } from "../server-factory.js";
 
 interface SessionEntry {
   server: McpServer;
@@ -15,7 +14,7 @@ interface SessionEntry {
 export interface HttpServerOptions {
   port: number;
   host?: string;
-  provider: SnapshotProvider | TutorialProvider;
+  provider: AnyProvider;
   mode: Mode;
 }
 

@@ -13,43 +13,37 @@ describe("MCP Server - Snapshot Mode", () => {
   });
 
   describe("tool listing", () => {
-    it("should list all registered tools", async () => {
+    it("registers only DB-backed tools (no tutorial/live-only tools)", async () => {
       const result = await ctx.client.listTools();
       const toolNames = result.tools.map((t) => t.name).sort();
 
       expect(toolNames).toEqual([
-        "faucet",
         "get_account",
-        "get_actions",
-        "get_archive_blocks",
-        "get_archive_stats",
         "get_archive_schema",
-        "get_best_chain",
+        "get_archive_stats",
         "get_block",
-        "get_events",
-        "get_genesis_constants",
-        "get_mempool",
-        "get_network_id",
-        "get_network_state",
+        "get_example",
         "get_staking_ledger",
         "get_sync_status",
-        "get_tracked_accounts",
         "get_transaction",
-        "get_transaction_status",
-        "describe_state",
-        "freeze_reset",
-        "get_example",
-        "list_examples",
-        "freeze_status",
         "list_blocks",
+        "list_examples",
         "query_archive_sql",
-        "reset_session",
-        "return_account",
         "search_transactions",
-        "send_delegation",
-        "send_payment",
-        "unfreeze_reset",
       ].sort());
+
+      // Tutorial- and live-only tools must not be registered in snapshot mode.
+      const forbidden = [
+        "faucet", "return_account", "reset_session",
+        "freeze_reset", "unfreeze_reset", "freeze_status",
+        "describe_state",
+        "send_payment", "send_delegation",
+        "get_transaction_status", "get_mempool",
+        "get_genesis_constants", "get_network_id", "get_tracked_accounts",
+        "get_best_chain",
+        "get_events", "get_actions", "get_archive_blocks", "get_network_state",
+      ];
+      for (const name of forbidden) expect(toolNames).not.toContain(name);
     });
 
     it("each tool should have a description", async () => {
@@ -95,12 +89,6 @@ describe("MCP Server - Snapshot Mode", () => {
       const text = (result.content as Array<{ type: string; text: string }>)[0].text;
       expect(JSON.parse(text)).toEqual(mockRows);
     });
-
-    it("get_tracked_accounts should return tutorial-only message", async () => {
-      const result = await ctx.client.callTool({ name: "get_tracked_accounts", arguments: {} });
-      const text = (result.content as Array<{ type: string; text: string }>)[0].text;
-      expect(text).toContain("only available in tutorial mode");
-    });
   });
 
   describe("block tools", () => {
@@ -144,12 +132,6 @@ describe("MCP Server - Snapshot Mode", () => {
       const text = (result.content as Array<{ type: string; text: string }>)[0].text;
       expect(JSON.parse(text)).toEqual(mockBlocks);
     });
-
-    it("get_best_chain should return tutorial-only message", async () => {
-      const result = await ctx.client.callTool({ name: "get_best_chain", arguments: {} });
-      const text = (result.content as Array<{ type: string; text: string }>)[0].text;
-      expect(text).toContain("only available in tutorial mode");
-    });
   });
 
   describe("transaction tools", () => {
@@ -183,39 +165,6 @@ describe("MCP Server - Snapshot Mode", () => {
       const text = (result.content as Array<{ type: string; text: string }>)[0].text;
       expect(JSON.parse(text)).toEqual(mockRows);
     });
-
-    it("send_payment should return tutorial-only message", async () => {
-      const result = await ctx.client.callTool({
-        name: "send_payment",
-        arguments: { from: "B62qA", to: "B62qB", amount: "1000000000" },
-      });
-      const text = (result.content as Array<{ type: string; text: string }>)[0].text;
-      expect(text).toContain("only available in tutorial mode");
-    });
-
-    it("send_delegation should return tutorial-only message", async () => {
-      const result = await ctx.client.callTool({
-        name: "send_delegation",
-        arguments: { from: "B62qA", to: "B62qB" },
-      });
-      const text = (result.content as Array<{ type: string; text: string }>)[0].text;
-      expect(text).toContain("only available in tutorial mode");
-    });
-
-    it("get_transaction_status should return tutorial-only message", async () => {
-      const result = await ctx.client.callTool({
-        name: "get_transaction_status",
-        arguments: { payment: "someid" },
-      });
-      const text = (result.content as Array<{ type: string; text: string }>)[0].text;
-      expect(text).toContain("only available in tutorial mode");
-    });
-
-    it("get_mempool should return tutorial-only message", async () => {
-      const result = await ctx.client.callTool({ name: "get_mempool", arguments: {} });
-      const text = (result.content as Array<{ type: string; text: string }>)[0].text;
-      expect(text).toContain("only available in tutorial mode");
-    });
   });
 
   describe("network tools", () => {
@@ -228,18 +177,6 @@ describe("MCP Server - Snapshot Mode", () => {
       const parsed = JSON.parse(text);
       expect(parsed.mode).toBe("snapshot");
       expect(parsed.total_blocks).toBe(100);
-    });
-
-    it("get_genesis_constants should return tutorial-only message", async () => {
-      const result = await ctx.client.callTool({ name: "get_genesis_constants", arguments: {} });
-      const text = (result.content as Array<{ type: string; text: string }>)[0].text;
-      expect(text).toContain("only available in tutorial mode");
-    });
-
-    it("get_network_id should return tutorial-only message", async () => {
-      const result = await ctx.client.callTool({ name: "get_network_id", arguments: {} });
-      const text = (result.content as Array<{ type: string; text: string }>)[0].text;
-      expect(text).toContain("only available in tutorial mode");
     });
 
     it("get_archive_stats should return stats", async () => {
@@ -292,85 +229,6 @@ describe("MCP Server - Snapshot Mode", () => {
       const parsed = JSON.parse(text);
       expect(parsed.blocks).toHaveLength(2);
       expect(parsed.blocks[0].column).toBe("id");
-    });
-  });
-
-  describe("zkapp tools (tutorial-only guards)", () => {
-    it("get_events should return tutorial-only message", async () => {
-      const result = await ctx.client.callTool({
-        name: "get_events",
-        arguments: { address: "B62qtest" },
-      });
-      const text = (result.content as Array<{ type: string; text: string }>)[0].text;
-      expect(text).toContain("tutorial mode");
-    });
-
-    it("get_actions should return tutorial-only message", async () => {
-      const result = await ctx.client.callTool({
-        name: "get_actions",
-        arguments: { address: "B62qtest" },
-      });
-      const text = (result.content as Array<{ type: string; text: string }>)[0].text;
-      expect(text).toContain("tutorial mode");
-    });
-
-    it("get_archive_blocks should return tutorial-only message", async () => {
-      const result = await ctx.client.callTool({ name: "get_archive_blocks", arguments: {} });
-      const text = (result.content as Array<{ type: string; text: string }>)[0].text;
-      expect(text).toContain("tutorial mode");
-    });
-
-    it("get_network_state should return tutorial-only message", async () => {
-      const result = await ctx.client.callTool({ name: "get_network_state", arguments: {} });
-      const text = (result.content as Array<{ type: string; text: string }>)[0].text;
-      expect(text).toContain("tutorial mode");
-    });
-  });
-
-  describe("test account tools (tutorial-only guards)", () => {
-    it("faucet should return tutorial-only message", async () => {
-      const result = await ctx.client.callTool({ name: "faucet", arguments: {} });
-      const text = (result.content as Array<{ type: string; text: string }>)[0].text;
-      expect(text).toContain("tutorial mode");
-    });
-
-    it("return_account should return tutorial-only message", async () => {
-      const result = await ctx.client.callTool({
-        name: "return_account",
-        arguments: { pk: "B62qtest", sk: "EKtest" },
-      });
-      const text = (result.content as Array<{ type: string; text: string }>)[0].text;
-      expect(text).toContain("tutorial mode");
-    });
-
-    it("reset_session should return tutorial-only message", async () => {
-      const result = await ctx.client.callTool({ name: "reset_session", arguments: {} });
-      const text = (result.content as Array<{ type: string; text: string }>)[0].text;
-      expect(text).toContain("tutorial mode");
-    });
-
-    it("freeze_reset should return tutorial-only message", async () => {
-      const result = await ctx.client.callTool({ name: "freeze_reset", arguments: { minutes: 30 } });
-      const text = (result.content as Array<{ type: string; text: string }>)[0].text;
-      expect(text).toContain("tutorial mode");
-    });
-
-    it("unfreeze_reset should return tutorial-only message", async () => {
-      const result = await ctx.client.callTool({ name: "unfreeze_reset", arguments: {} });
-      const text = (result.content as Array<{ type: string; text: string }>)[0].text;
-      expect(text).toContain("tutorial mode");
-    });
-
-    it("freeze_status should return tutorial-only message", async () => {
-      const result = await ctx.client.callTool({ name: "freeze_status", arguments: {} });
-      const text = (result.content as Array<{ type: string; text: string }>)[0].text;
-      expect(text).toContain("tutorial mode");
-    });
-
-    it("describe_state should return tutorial-only message", async () => {
-      const result = await ctx.client.callTool({ name: "describe_state", arguments: {} });
-      const text = (result.content as Array<{ type: string; text: string }>)[0].text;
-      expect(text).toContain("tutorial mode");
     });
   });
 
