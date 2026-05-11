@@ -67,6 +67,26 @@ MINA_MCP_MODE=snapshot npm start    # or
 MINA_MCP_MODE=tutorial npm start
 ```
 
+## Demo: end-to-end payment in tutorial mode
+
+The point of running this server is that a single natural-language prompt can drive a multi-step on-chain flow that would otherwise need half a dozen separate GraphQL calls. Once the lightnet is up and your MCP client is connected, this prompt:
+
+> Grab two funded test accounts from the faucet. Send 10 MINA from the first to the second, then poll until it lands in a block — show me the mempool state right after submission and the block height it gets included in. Once confirmed, check both balances and return both accounts.
+
+drives the following tool sequence (excerpted from a real tutorial-mode run):
+
+| Step | Tool | Key output |
+|------|------|------------|
+| 1 | `faucet` ×2 | Two accounts, 1550 MINA each |
+| 2 | `send_payment` (10 MINA, 0.1 fee) | Tx hash `5JtVaGBj…6Tto` |
+| 3 | `get_mempool` filtered by sender | Captures the pending tx |
+| 4 | `get_transaction_status` | `INCLUDED` |
+| 5 | `get_transaction` → `get_block(height=175)` | In block **175** (`3NKErr14…YHpm`), status `applied` |
+| 6 | `get_account` ×2 | Sender 1539.9 MINA, Receiver 1560 MINA — sender −10 payment −0.1 fee, receiver +10 ✓ |
+| 7 | `return_account` ×2 | Both released back to the pool |
+
+End-to-end wall-clock was a few seconds on a synced lightnet. The flow exercises every tutorial-only tool family in one go — faucet/return, payment submission, mempool, status polling, block/account lookup — making it a useful smoke check after deploy.
+
 ## Configuration
 
 Copy `.env.example` to `.env` and adjust as needed:
