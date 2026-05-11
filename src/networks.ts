@@ -1,0 +1,83 @@
+// Public Mina network endpoints exposed by o1labs/MinaProtocol on GCP.
+// These are best-effort services without SLAs — see the source-of-truth doc
+// for the canonical URLs (subject to change at any time).
+
+export type NetworkName = "devnet" | "mainnet" | "mesa";
+
+// "stable"   — long-lived network we expect to keep around (devnet, mainnet).
+// "preflight" — short-lived ops/staging network. May be renamed, reset, or
+//   retired without notice; endpoint URLs and archive-dump filenames are not
+//   guaranteed to remain stable. Tools that connect to a preflight network
+//   surface this in their startup banner and in `describe_state`.
+export type NetworkStability = "stable" | "preflight";
+
+// Cadence at which the archive dump is published to mina-archive-dumps.
+// Used by snapshot-mode tooling to pick a fallback hour when today's dump
+// hasn't landed yet.
+export type ArchiveDumpCadence = "daily" | "twice-daily";
+
+export interface NetworkConfig {
+  name: NetworkName;
+  description: string;
+  stability: NetworkStability;
+  daemonGraphql: string;
+  archiveNodeApi: string;
+  // Snapshot mode (docker-compose.snapshot.yml --profile download): the dump
+  // is fetched from
+  //   https://storage.googleapis.com/mina-archive-dumps/${archiveDumpPrefix}-${date}_${hour}.sql.tar.gz
+  // The prefix is the ONLY thing that differs per network.
+  archiveDumpPrefix: string;
+  archiveDumpCadence: ArchiveDumpCadence;
+}
+
+export const NETWORKS: Record<NetworkName, NetworkConfig> = {
+  devnet: {
+    name: "devnet",
+    description: "Mina public devnet — for development against a live network.",
+    stability: "stable",
+    daemonGraphql: "https://devnet-plain-1.gcp.o1test.net/graphql",
+    archiveNodeApi: "https://devnet-archive-node-api.gcp.o1test.net",
+    archiveDumpPrefix: "devnet-archive-dump",
+    archiveDumpCadence: "daily",
+  },
+  mainnet: {
+    name: "mainnet",
+    description: "Mina mainnet — production network, read-only via MCP.",
+    stability: "stable",
+    daemonGraphql: "https://mainnet-plain-1.gcp.o1test.net/graphql",
+    archiveNodeApi: "https://archive-node-api.gcp.o1test.net",
+    archiveDumpPrefix: "mainnet-archive-dump",
+    archiveDumpCadence: "daily",
+  },
+  mesa: {
+    name: "mesa",
+    description:
+      "Mina mesa public testnet — preflight/preview network for testing pre-release builds. " +
+      "Not guaranteed to persist: endpoints, prefix, and even the network itself may be reset or retired without notice.",
+    stability: "preflight",
+    daemonGraphql: "https://plain-1-graphql.mina-mesa-network.gcp.o1test.net/graphql",
+    archiveNodeApi: "https://mesa-archive-node-api.gcp.o1test.net",
+    // Preflight ops-naming, not a stable convention — likely to change when
+    // mesa graduates. Document this prominently anywhere it's surfaced to users.
+    archiveDumpPrefix: "hetzner-pre-mesa-1-archive-dump",
+    archiveDumpCadence: "twice-daily",
+  },
+};
+
+export function resolveNetwork(name: string): NetworkConfig {
+  const cfg = NETWORKS[name as NetworkName];
+  if (!cfg) {
+    const known = Object.keys(NETWORKS).join(", ");
+    throw new Error(`Unknown network '${name}'. Known: ${known}.`);
+  }
+  return cfg;
+}
+
+export function preflightWarning(cfg: NetworkConfig): string | null {
+  if (cfg.stability !== "preflight") return null;
+  return (
+    `[WARN] Network '${cfg.name}' is a PREFLIGHT network: it may be reset, ` +
+    `renamed, or retired without notice. Endpoints and archive-dump filenames ` +
+    `are not guaranteed to remain stable. Treat any data you gather as ephemeral.`
+  );
+}

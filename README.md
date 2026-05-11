@@ -55,17 +55,73 @@ npm run build
 # Option A: Snapshot mode (read-only, from local dump)
 SNAPSHOT_DIR=./snapshots/devnet-latest docker compose -f docker-compose.snapshot.yml up -d
 
-# Option B: Snapshot mode (download latest devnet dump)
+# Option B: Snapshot mode (download latest dump from GCS — devnet by default)
 docker compose -f docker-compose.snapshot.yml --profile download up -d
+#   See "Snapshot mode against other public networks" below for mainnet/mesa.
 
 # Option C: Tutorial mode (full lightnet)
 docker compose -f docker-compose.tutorial.yml up -d
 # Wait ~1-2 min for the network to sync
 
+# Option D: Live mode (read-only, talks to a public Mina network — no local infra)
+#   Picks a network with --network (devnet, mainnet, mesa). Nothing else to start.
+
 # Run the MCP server
-MINA_MCP_MODE=snapshot npm start    # or
-MINA_MCP_MODE=tutorial npm start
+MINA_MCP_MODE=snapshot npm start                              # or
+MINA_MCP_MODE=tutorial npm start                              # or
+npm start -- --mode live --network devnet                     # no Postgres / lightnet needed
 ```
+
+### Live mode against a public Mina network
+
+Live mode is a thin read-only proxy that turns MCP tool calls into GraphQL/HTTP requests against the o1Labs-hosted public endpoints. There is **nothing to host** — run it locally next to your MCP client:
+
+```bash
+npm start -- --mode live --network devnet     # or mainnet, mesa
+# equivalently:
+MINA_MCP_MODE=live MINA_MCP_NETWORK=devnet npm start
+```
+
+Endpoints are best-effort services without SLAs and URLs are subject to change. Networks are classified by **stability tier**:
+
+| Network | Stability | What it means |
+|---|---|---|
+| `devnet` | stable | Long-lived dev network. Expected to stick around. |
+| `mainnet` | stable | Production. Expected to stick around. |
+| `mesa` | **preflight** | Preview/staging network. **May be reset, renamed, or retired without notice.** Endpoints, archive-dump filenames, and even the network identity itself are not guaranteed stable. |
+
+When a `LiveProvider` is constructed against a preflight network, the server emits a `[WARN] Network '<name>' is a PREFLIGHT network…` line at startup and prepends a `PREFLIGHT` hint to `describe_state`'s `hints[]` — so any LLM consuming the output sees the caveat before reasoning about the data. If you build downstream automation against a preflight network, treat any data you gather as ephemeral and have a fallback to a stable network.
+
+### Snapshot mode against other public networks
+
+The `--profile download` path of `docker-compose.snapshot.yml` fetches dumps from the public bucket `https://storage.googleapis.com/mina-archive-dumps`. The URL layout is `<prefix>-<YYYY-MM-DD>_<HOUR>.sql.tar.gz`. To target a different network, override `ARCHIVE_DUMP_PREFIX`:
+
+| Network | Prefix | Cadence | Recent size |
+|---|---|---|---|
+| devnet (default) | `devnet-archive-dump` | daily, `_0000` UTC | ~370 MB compressed |
+| mainnet | `mainnet-archive-dump` | daily, `_0000` UTC | ~1.5 GB compressed |
+| mesa (**preflight**) | `hetzner-pre-mesa-1-archive-dump` | twice daily, `_0000` + `_1200` UTC | ~32 MB compressed |
+
+```bash
+# Mainnet snapshot
+ARCHIVE_DUMP_PREFIX=mainnet-archive-dump \
+  docker compose -f docker-compose.snapshot.yml --profile download up -d
+
+# Mesa snapshot (preflight — see warning below)
+ARCHIVE_DUMP_PREFIX=hetzner-pre-mesa-1-archive-dump ARCHIVE_DUMP_HOUR=1200 \
+  docker compose -f docker-compose.snapshot.yml --profile download up -d
+```
+
+> **Mesa is a preflight network.** The dump prefix above is internal ops naming and is **not a stable convention** — it may change or stop being published without notice when mesa graduates or is retired. Treat snapshot data from mesa as ephemeral.
+
+In live mode the server hides every tool that would need infra it doesn't have:
+
+- no archive Postgres → no `query_archive_sql`, `get_archive_schema`, `list_blocks`, `search_transactions`, `get_transaction`, `get_staking_ledger`, `get_archive_stats`;
+- no accounts-manager / faucet → no `faucet`, `return_account`, `reset_session`;
+- no reset janitor → no `freeze_reset`, `unfreeze_reset`, `freeze_status`;
+- public daemons don't sign for you → no `send_payment`, `send_delegation`, `get_tracked_accounts`.
+
+`get_block` requires a `stateHash` in live mode — use `get_archive_blocks` (Archive-Node-API) to discover one first.
 
 ## Demo: end-to-end payment in tutorial mode
 
@@ -99,7 +155,8 @@ Key variables:
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `MINA_MCP_MODE` | `snapshot` | Server mode: `snapshot` or `tutorial` |
+| `MINA_MCP_MODE` | `snapshot` | Server mode: `snapshot`, `tutorial`, or `live` |
+| `MINA_MCP_NETWORK` | _(unset)_ | Required in live mode: `devnet`, `mainnet`, or `mesa` |
 | `ARCHIVE_DB_HOST` | `localhost` | Archive PostgreSQL host |
 | `ARCHIVE_DB_PORT` | `5432` | Archive PostgreSQL port |
 | `MINA_GRAPHQL_ENDPOINT` | `http://localhost:3085/graphql` | Mina daemon GraphQL (tutorial mode) |

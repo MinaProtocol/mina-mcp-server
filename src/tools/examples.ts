@@ -1,12 +1,12 @@
 import { z } from "zod";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
-import { SnapshotProvider } from "../providers/snapshot.js";
-import { TutorialProvider } from "../providers/tutorial.js";
+import { AnyProvider, Mode } from "../server-factory.js";
 import { EXAMPLES, getExample, listExamples } from "../examples/library.js";
 
 export function registerExampleTools(
   server: McpServer,
-  getProvider: () => SnapshotProvider | TutorialProvider
+  _getProvider: () => AnyProvider,
+  mode: Mode
 ) {
   server.tool(
     "list_examples",
@@ -15,8 +15,6 @@ export function registerExampleTools(
       include: z.enum(["current", "all"]).default("current").describe("'current' filters to workflows runnable in this server's mode; 'all' shows every workflow."),
     },
     async ({ include }) => {
-      const provider = getProvider();
-      const mode = provider instanceof TutorialProvider ? "tutorial" : "snapshot";
       const items = include === "all"
         ? EXAMPLES.map((e) => ({ name: e.name, summary: e.summary, mode: e.mode }))
         : listExamples(mode);

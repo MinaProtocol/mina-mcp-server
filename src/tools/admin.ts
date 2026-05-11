@@ -1,14 +1,17 @@
 import { z } from "zod";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
-import { SnapshotProvider } from "../providers/snapshot.js";
+import { AnyProvider, Mode } from "../server-factory.js";
 import { TutorialProvider } from "../providers/tutorial.js";
 
 const TUTORIAL_ONLY_MSG = "This tool requires tutorial mode.";
 
 export function registerAdminTools(
   server: McpServer,
-  getProvider: () => SnapshotProvider | TutorialProvider
+  getProvider: () => AnyProvider,
+  mode: Mode
 ) {
+  if (mode !== "tutorial") return;
+
   server.tool(
     "freeze_reset",
     "[admin] Pause the periodic chain-reset janitor for N minutes. Use before a human demo so the chain state stays stable; the freeze auto-expires after the duration. Pass 0 to clear the freeze.",

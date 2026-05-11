@@ -1,15 +1,18 @@
 import { z } from "zod";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
-import { SnapshotProvider } from "../providers/snapshot.js";
+import { AnyProvider, Mode } from "../server-factory.js";
 import { TutorialProvider } from "../providers/tutorial.js";
 
 export function registerZkAppTools(
   server: McpServer,
-  getProvider: () => SnapshotProvider | TutorialProvider
+  getProvider: () => AnyProvider,
+  mode: Mode
 ) {
+  if (mode === "snapshot") return;
+
   server.tool(
     "get_events",
-    "[business] Get emitted events from a zkApp address. Uses the Archive-Node-API (tutorial mode only). Events are state-change notifications emitted by zkApp account updates.",
+    "[business] Get emitted events from a zkApp address. Uses the Archive-Node-API. Events are state-change notifications emitted by zkApp account updates.",
     {
       address: z.string().describe("zkApp public key (B62...)"),
       tokenId: z.string().optional().describe("Token ID (defaults to MINA token)"),
@@ -20,7 +23,7 @@ export function registerZkAppTools(
     async (args) => {
       const provider = getProvider();
       if (!(provider instanceof TutorialProvider) || !provider.archiveApi) {
-        return { content: [{ type: "text", text: "This tool requires tutorial mode with Archive-Node-API." }] };
+        return { content: [{ type: "text", text: "This tool requires Archive-Node-API." }] };
       }
       try {
         const events = await provider.archiveApi.getEvents(args);
@@ -33,7 +36,7 @@ export function registerZkAppTools(
 
   server.tool(
     "get_actions",
-    "[business] Get dispatched actions from a zkApp address. Uses the Archive-Node-API (tutorial mode only). Actions are reducer inputs that modify zkApp state.",
+    "[business] Get dispatched actions from a zkApp address. Uses the Archive-Node-API. Actions are reducer inputs that modify zkApp state.",
     {
       address: z.string().describe("zkApp public key (B62...)"),
       tokenId: z.string().optional().describe("Token ID"),
@@ -46,7 +49,7 @@ export function registerZkAppTools(
     async (args) => {
       const provider = getProvider();
       if (!(provider instanceof TutorialProvider) || !provider.archiveApi) {
-        return { content: [{ type: "text", text: "This tool requires tutorial mode with Archive-Node-API." }] };
+        return { content: [{ type: "text", text: "This tool requires Archive-Node-API." }] };
       }
       try {
         const actions = await provider.archiveApi.getActions(args);
@@ -59,7 +62,7 @@ export function registerZkAppTools(
 
   server.tool(
     "get_archive_blocks",
-    "[business] Get blocks from the Archive-Node-API (tutorial mode only). Includes block height, creator, timestamp, and coinbase reward.",
+    "[business] Get blocks from the Archive-Node-API. Includes block height, creator, timestamp, and coinbase reward.",
     {
       canonical: z.boolean().optional().describe("Only return canonical (finalized) blocks"),
       sortBy: z.enum(["BLOCKHEIGHT_ASC", "BLOCKHEIGHT_DESC"]).default("BLOCKHEIGHT_DESC").describe("Sort order"),
@@ -68,7 +71,7 @@ export function registerZkAppTools(
     async (args) => {
       const provider = getProvider();
       if (!(provider instanceof TutorialProvider) || !provider.archiveApi) {
-        return { content: [{ type: "text", text: "This tool requires tutorial mode with Archive-Node-API." }] };
+        return { content: [{ type: "text", text: "This tool requires Archive-Node-API." }] };
       }
       try {
         const blocks = await provider.archiveApi.getBlocks(args);
@@ -81,12 +84,12 @@ export function registerZkAppTools(
 
   server.tool(
     "get_network_state",
-    "[business] Get network state from the Archive-Node-API (tutorial mode only). Returns max canonical and pending block heights.",
+    "[business] Get network state from the Archive-Node-API. Returns max canonical and pending block heights.",
     {},
     async () => {
       const provider = getProvider();
       if (!(provider instanceof TutorialProvider) || !provider.archiveApi) {
-        return { content: [{ type: "text", text: "This tool requires tutorial mode with Archive-Node-API." }] };
+        return { content: [{ type: "text", text: "This tool requires Archive-Node-API." }] };
       }
       try {
         const state = await provider.archiveApi.getNetworkState();

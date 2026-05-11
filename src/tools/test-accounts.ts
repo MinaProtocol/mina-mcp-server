@@ -1,13 +1,16 @@
 import { z } from "zod";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
-import { SnapshotProvider } from "../providers/snapshot.js";
+import { AnyProvider, Mode } from "../server-factory.js";
 import { TutorialProvider } from "../providers/tutorial.js";
 import { STDIO_SESSION_ID } from "../session/tracker.js";
 
 export function registerTestAccountTools(
   server: McpServer,
-  getProvider: () => SnapshotProvider | TutorialProvider
+  getProvider: () => AnyProvider,
+  mode: Mode
 ) {
+  if (mode !== "tutorial") return;
+
   server.tool(
     "faucet",
     "[infra] Get a ready-to-use funded test account (tutorial mode only). Acquires a pre-funded account (1550 MINA), imports its key into the daemon, and unlocks it for signing. The account is reserved until you call return_account or reset_session, or until your session disconnects.",

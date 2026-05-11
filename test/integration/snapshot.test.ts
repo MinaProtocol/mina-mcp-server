@@ -34,13 +34,13 @@ describe("Snapshot Mode Integration", () => {
     server = new McpServer({ name: "mina-snapshot-integration", version: "0.1.0" });
     const getProvider = () => provider;
 
-    registerAccountTools(server, getProvider);
-    registerBlockTools(server, getProvider);
-    registerTransactionTools(server, getProvider);
-    registerNetworkTools(server, getProvider);
-    registerSchemaTools(server, getProvider);
-    registerZkAppTools(server, getProvider);
-    registerTestAccountTools(server, getProvider);
+    registerAccountTools(server, getProvider, "snapshot");
+    registerBlockTools(server, getProvider, "snapshot");
+    registerTransactionTools(server, getProvider, "snapshot");
+    registerNetworkTools(server, getProvider, "snapshot");
+    registerSchemaTools(server, getProvider, "snapshot");
+    registerZkAppTools(server, getProvider, "snapshot");
+    registerTestAccountTools(server, getProvider, "snapshot");
 
     const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
     client = new Client({ name: "snapshot-test-client", version: "0.1.0" });
@@ -54,9 +54,25 @@ describe("Snapshot Mode Integration", () => {
     await db.close();
   });
 
-  it("should list all tools", async () => {
+  it("registers the DB-backed snapshot toolset (tutorial- and live-only tools are filtered out)", async () => {
     const result = await client.listTools();
-    expect(result.tools.length).toBeGreaterThanOrEqual(20);
+    const names = result.tools.map((t) => t.name).sort();
+    // Snapshot mode registers the archive-DB tools plus the always-on examples
+    // pair; tutorial-only and live-only tools must NOT be registered.
+    expect(names).toContain("get_account");
+    expect(names).toContain("get_block");
+    expect(names).toContain("list_blocks");
+    expect(names).toContain("get_transaction");
+    expect(names).toContain("search_transactions");
+    expect(names).toContain("get_staking_ledger");
+    expect(names).toContain("get_sync_status");
+    expect(names).toContain("get_archive_stats");
+    expect(names).toContain("query_archive_sql");
+    expect(names).toContain("get_archive_schema");
+    // Filtered out:
+    for (const forbidden of ["faucet", "send_payment", "send_delegation", "get_tracked_accounts", "get_best_chain", "get_events", "get_actions", "get_archive_blocks", "get_network_state"]) {
+      expect(names).not.toContain(forbidden);
+    }
   });
 
   it("get_sync_status should return snapshot stats", async () => {
@@ -108,18 +124,21 @@ describe("Snapshot Mode Integration", () => {
     expect(text).toContain("Query error");
   });
 
-  it("send_payment should return tutorial-only message", async () => {
-    const result = await client.callTool({
-      name: "send_payment",
-      arguments: { from: "B62qA", to: "B62qB", amount: "1000000000" },
-    });
-    const text = (result.content as Array<{ type: string; text: string }>)[0].text;
-    expect(text).toContain("only available in tutorial mode");
-  });
-
-  it("faucet should return tutorial-only message", async () => {
-    const result = await client.callTool({ name: "faucet", arguments: {} });
-    const text = (result.content as Array<{ type: string; text: string }>)[0].text;
-    expect(text).toContain("tutorial mode");
+  it("calling a tutorial-only tool yields an MCP 'tool not found' error (it is not registered in snapshot mode)", async () => {
+    // Filtering happens at registration time now, so tutorial-only tools
+    // aren't even on the wire. Depending on the MCP SDK version the
+    // unknown-tool path either rejects the promise or resolves with
+    // an `MCP error -32602: Tool X not found` text content — accept both.
+    const expectToolNotFound = async (name: string, args: Record<string, unknown> = {}) => {
+      try {
+        const result = await client.callTool({ name, arguments: args });
+        const text = (result.content as Array<{ type: string; text: string }>)[0].text;
+        expect(text).toMatch(new RegExp(`Tool ${name} not found`));
+      } catch (e) {
+        expect((e as Error).message).toMatch(new RegExp(`Tool ${name} not found`));
+      }
+    };
+    await expectToolNotFound("send_payment", { from: "B62qA", to: "B62qB", amount: "1000000000" });
+    await expectToolNotFound("faucet");
   });
 });

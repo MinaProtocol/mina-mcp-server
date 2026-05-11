@@ -1,15 +1,16 @@
 import { z } from "zod";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
-import { SnapshotProvider } from "../providers/snapshot.js";
+import { AnyProvider, Mode } from "../server-factory.js";
 import { TutorialProvider } from "../providers/tutorial.js";
 
 export function registerBlockTools(
   server: McpServer,
-  getProvider: () => SnapshotProvider | TutorialProvider
+  getProvider: () => AnyProvider,
+  mode: Mode
 ) {
   server.tool(
     "get_block",
-    "[business] Get a block by state hash or height. In tutorial mode, can also query live blocks from the daemon.",
+    "[business] Get a block by state hash or height. In tutorial mode, can also query live blocks from the daemon. In live mode, a stateHash is required (use get_archive_blocks to discover one).",
     {
       stateHash: z.string().optional().describe("Block state hash"),
       height: z.number().optional().describe("Block height"),
@@ -39,36 +40,40 @@ export function registerBlockTools(
     }
   );
 
-  server.tool(
-    "list_blocks",
-    "[business] List blocks from the archive database, ordered by height descending.",
-    {
-      limit: z.number().min(1).max(100).default(20).describe("Number of blocks to return (max 100)"),
-      offset: z.number().min(0).default(0).describe("Offset for pagination"),
-      status: z.enum(["canonical", "orphaned", "pending"]).optional().describe("Filter by chain status"),
-    },
-    async ({ limit, offset, status }) => {
-      const provider = getProvider();
-      const result = await provider.listBlocks(limit, offset, status);
-      return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
-    }
-  );
-
-  server.tool(
-    "get_best_chain",
-    "[business] Get the current best chain from the live daemon (tutorial mode only).",
-    {
-      maxLength: z.number().min(1).max(290).default(10).describe("Maximum number of blocks to return"),
-    },
-    async ({ maxLength }) => {
-      const provider = getProvider();
-      if (!(provider instanceof TutorialProvider)) {
-        return {
-          content: [{ type: "text", text: "This tool is only available in tutorial mode." }],
-        };
+  if (mode !== "live") {
+    server.tool(
+      "list_blocks",
+      "[business] List blocks from the archive database, ordered by height descending.",
+      {
+        limit: z.number().min(1).max(100).default(20).describe("Number of blocks to return (max 100)"),
+        offset: z.number().min(0).default(0).describe("Offset for pagination"),
+        status: z.enum(["canonical", "orphaned", "pending"]).optional().describe("Filter by chain status"),
+      },
+      async ({ limit, offset, status }) => {
+        const provider = getProvider();
+        const result = await provider.listBlocks(limit, offset, status);
+        return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
       }
-      const result = await provider.getBestChain(maxLength);
-      return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
-    }
-  );
+    );
+  }
+
+  if (mode !== "snapshot") {
+    server.tool(
+      "get_best_chain",
+      "[business] Get the current best chain from the live daemon.",
+      {
+        maxLength: z.number().min(1).max(290).default(10).describe("Maximum number of blocks to return"),
+      },
+      async ({ maxLength }) => {
+        const provider = getProvider();
+        if (!(provider instanceof TutorialProvider)) {
+          return {
+            content: [{ type: "text", text: "This tool requires a live daemon connection." }],
+          };
+        }
+        const result = await provider.getBestChain(maxLength);
+        return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
+      }
+    );
+  }
 }

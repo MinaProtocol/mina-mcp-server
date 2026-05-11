@@ -9,24 +9,34 @@ import { SessionTracker } from "./session/tracker.js";
 import { ResetController } from "./reset/controller.js";
 import { SnapshotProvider } from "./providers/snapshot.js";
 import { TutorialProvider } from "./providers/tutorial.js";
-import { Mode, buildMcpServer } from "./server-factory.js";
+import { LiveProvider } from "./providers/live.js";
+import { AnyProvider, Mode, buildMcpServer } from "./server-factory.js";
 import { startHttpServer } from "./transports/http.js";
+import { NETWORKS, NetworkName, resolveNetwork } from "./networks.js";
 
 type Transport = "stdio" | "http";
 
-function parseArgs(): { mode: Mode; transport: Transport; httpPort: number } {
+interface ParsedArgs {
+  mode: Mode;
+  transport: Transport;
+  httpPort: number;
+  network?: NetworkName;
+}
+
+function parseArgs(): ParsedArgs {
   const args = process.argv.slice(2);
   let mode: Mode = "snapshot";
   let transport: Transport = "stdio";
+  let network: NetworkName | undefined;
 
   for (let i = 0; i < args.length; i++) {
     if (args[i] === "--mode" && args[i + 1]) {
       const val = args[i + 1];
-      if (val !== "snapshot" && val !== "tutorial") {
-        console.error(`Invalid mode: ${val}. Use 'snapshot' or 'tutorial'.`);
+      if (val !== "snapshot" && val !== "tutorial" && val !== "live") {
+        console.error(`Invalid mode: ${val}. Use 'snapshot', 'tutorial', or 'live'.`);
         process.exit(1);
       }
-      mode = val;
+      mode = val as Mode;
     } else if (args[i] === "--transport" && args[i + 1]) {
       const val = args[i + 1];
       if (val !== "stdio" && val !== "http") {
@@ -34,14 +44,37 @@ function parseArgs(): { mode: Mode; transport: Transport; httpPort: number } {
         process.exit(1);
       }
       transport = val;
+    } else if (args[i] === "--network" && args[i + 1]) {
+      const val = args[i + 1];
+      if (!(val in NETWORKS)) {
+        console.error(`Invalid network: ${val}. Known: ${Object.keys(NETWORKS).join(", ")}.`);
+        process.exit(1);
+      }
+      network = val as NetworkName;
     }
   }
 
-  if (process.env.MINA_MCP_MODE === "tutorial" || process.env.MINA_MCP_MODE === "snapshot") {
-    mode = process.env.MINA_MCP_MODE;
+  const envMode = process.env.MINA_MCP_MODE;
+  if (envMode === "tutorial" || envMode === "snapshot" || envMode === "live") {
+    mode = envMode;
   }
   if (process.env.MINA_MCP_TRANSPORT === "stdio" || process.env.MINA_MCP_TRANSPORT === "http") {
     transport = process.env.MINA_MCP_TRANSPORT;
+  }
+  const envNetwork = process.env.MINA_MCP_NETWORK;
+  if (envNetwork && envNetwork in NETWORKS) {
+    network = envNetwork as NetworkName;
+  }
+
+  if (mode === "live" && !network) {
+    console.error(
+      `Mode 'live' requires --network <devnet|mainnet|mesa> (or MINA_MCP_NETWORK).`
+    );
+    process.exit(1);
+  }
+  if (mode !== "live" && network) {
+    console.error(`--network is only valid with --mode live (got mode '${mode}').`);
+    process.exit(1);
   }
 
   const httpPort = Number.parseInt(process.env.MINA_MCP_HTTP_PORT ?? "3000", 10);
@@ -50,10 +83,10 @@ function parseArgs(): { mode: Mode; transport: Transport; httpPort: number } {
     process.exit(1);
   }
 
-  return { mode, transport, httpPort };
+  return { mode, transport, httpPort, network };
 }
 
-function logProviderHealth(provider: SnapshotProvider | TutorialProvider, mode: Mode, db: ArchiveDB) {
+function logProviderHealth(provider: AnyProvider, mode: Mode, db: ArchiveDB) {
   if (mode === "tutorial") {
     const tp = provider as TutorialProvider;
     void Promise.allSettled([
@@ -69,16 +102,28 @@ function logProviderHealth(provider: SnapshotProvider | TutorialProvider, mode: 
       console.error(`  Accounts Manager (${tp.accountsManager?.getEndpoint()}): ${status(results[2])}`);
       console.error(`  Archive DB: ${status(results[3])}`);
     });
+  } else if (mode === "live") {
+    const lp = provider as LiveProvider;
+    void Promise.allSettled([
+      lp.graphql.isConnected(),
+      lp.archiveApi?.isConnected(),
+    ]).then((results) => {
+      const status = (r: PromiseSettledResult<unknown>) =>
+        r.status === "fulfilled" && r.value ? "connected" : "not reachable";
+      console.error(`  Network: ${lp.network.name}`);
+      console.error(`  Daemon GraphQL (${lp.graphql.getEndpoint()}): ${status(results[0])}`);
+      console.error(`  Archive-Node-API (${lp.archiveApi?.getEndpoint()}): ${status(results[1])}`);
+    });
   } else {
     void db.isConnected().then((c) => console.error(`  Archive DB: ${c ? "connected" : "not reachable"}`));
   }
 }
 
 async function main() {
-  const { mode, transport, httpPort } = parseArgs();
+  const { mode, transport, httpPort, network } = parseArgs();
 
   const db = new ArchiveDB();
-  let provider: SnapshotProvider | TutorialProvider;
+  let provider: AnyProvider;
 
   if (mode === "tutorial") {
     const graphql = new GraphQLClient();
@@ -87,6 +132,8 @@ async function main() {
     const tracker = new SessionTracker(accountsManager);
     const resetController = new ResetController();
     provider = new TutorialProvider(db, graphql, archiveApi, accountsManager, tracker, resetController);
+  } else if (mode === "live") {
+    provider = new LiveProvider(resolveNetwork(network!));
   } else {
     provider = new SnapshotProvider(db);
   }
@@ -122,10 +169,22 @@ async function main() {
       process.once("beforeExit", onExit("beforeExit"));
     }
 
-    console.error(`Mina MCP server started in ${mode} mode (stdio)`);
+    const liveSuffix = () => {
+      if (mode !== "live") return "";
+      const cfg = (provider as LiveProvider).network;
+      const tag = cfg.stability === "preflight" ? `${network} [PREFLIGHT]` : `${network}`;
+      return ` (network: ${tag})`;
+    };
+    console.error(`Mina MCP server started in ${mode} mode (stdio)${liveSuffix()}`);
   } else {
     const httpServer = await startHttpServer({ port: httpPort, provider, mode });
-    console.error(`Mina MCP server started in ${mode} mode (http) on :${httpServer.port}`);
+    const liveSuffix = () => {
+      if (mode !== "live") return "";
+      const cfg = (provider as LiveProvider).network;
+      const tag = cfg.stability === "preflight" ? `${network} [PREFLIGHT]` : `${network}`;
+      return ` (network: ${tag})`;
+    };
+    console.error(`Mina MCP server started in ${mode} mode (http) on :${httpServer.port}${liveSuffix()}`);
     console.error(`  POST /mcp        — JSON-RPC requests (use Mcp-Session-Id header)`);
     console.error(`  GET  /mcp        — SSE stream`);
     console.error(`  GET  /health     — liveness/health`);

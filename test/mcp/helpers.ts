@@ -4,6 +4,8 @@ import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { SnapshotProvider } from "../../src/providers/snapshot.js";
 import { TutorialProvider } from "../../src/providers/tutorial.js";
+import { LiveProvider } from "../../src/providers/live.js";
+import { resolveNetwork, NetworkName } from "../../src/networks.js";
 import { ArchiveDB } from "../../src/db/archive.js";
 import { GraphQLClient } from "../../src/graphql/client.js";
 import { ArchiveNodeAPI } from "../../src/graphql/archive-api.js";
@@ -76,16 +78,16 @@ export async function setupSnapshotMcp(): Promise<McpTestContext> {
   const server = new McpServer({ name: "mina-snapshot-test", version: "0.1.0" });
   const getProvider = () => provider;
 
-  registerAccountTools(server, getProvider);
-  registerBlockTools(server, getProvider);
-  registerTransactionTools(server, getProvider);
-  registerNetworkTools(server, getProvider);
-  registerSchemaTools(server, getProvider);
-  registerZkAppTools(server, getProvider);
-  registerTestAccountTools(server, getProvider);
-  registerAdminTools(server, getProvider);
-  registerStateTools(server, getProvider);
-  registerExampleTools(server, getProvider);
+  registerAccountTools(server, getProvider, "snapshot");
+  registerBlockTools(server, getProvider, "snapshot");
+  registerTransactionTools(server, getProvider, "snapshot");
+  registerNetworkTools(server, getProvider, "snapshot");
+  registerSchemaTools(server, getProvider, "snapshot");
+  registerZkAppTools(server, getProvider, "snapshot");
+  registerTestAccountTools(server, getProvider, "snapshot");
+  registerAdminTools(server, getProvider, "snapshot");
+  registerStateTools(server, getProvider, "snapshot");
+  registerExampleTools(server, getProvider, "snapshot");
 
   const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
 
@@ -114,6 +116,55 @@ export interface TutorialMcpTestContext extends McpTestContext {
   resetController: ResetController;
 }
 
+export interface LiveMcpTestContext {
+  client: Client;
+  server: McpServer;
+  provider: LiveProvider;
+  mockGraphQL: GraphQLClient;
+  mockArchiveApi: ArchiveNodeAPI;
+  cleanup: () => Promise<void>;
+}
+
+export async function setupLiveMcp(networkName: NetworkName = "devnet"): Promise<LiveMcpTestContext> {
+  const mockGraphQL = createMockGraphQL();
+  const mockArchiveApi = createMockArchiveApi();
+  const provider = new LiveProvider(resolveNetwork(networkName));
+  // Swap in mocks so tests don't reach the public network.
+  (provider as unknown as { graphql: GraphQLClient }).graphql = mockGraphQL;
+  (provider as unknown as { archiveApi: ArchiveNodeAPI }).archiveApi = mockArchiveApi;
+
+  const server = new McpServer({ name: "mina-live-test", version: "0.1.0" });
+  const getProvider = () => provider;
+
+  registerAccountTools(server, getProvider, "live");
+  registerBlockTools(server, getProvider, "live");
+  registerTransactionTools(server, getProvider, "live");
+  registerNetworkTools(server, getProvider, "live");
+  registerSchemaTools(server, getProvider, "live");
+  registerZkAppTools(server, getProvider, "live");
+  registerTestAccountTools(server, getProvider, "live");
+  registerAdminTools(server, getProvider, "live");
+  registerStateTools(server, getProvider, "live");
+  registerExampleTools(server, getProvider, "live");
+
+  const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
+  const client = new Client({ name: "test-client", version: "0.1.0" });
+  await server.connect(serverTransport);
+  await client.connect(clientTransport);
+
+  return {
+    client,
+    server,
+    provider,
+    mockGraphQL,
+    mockArchiveApi,
+    cleanup: async () => {
+      await client.close();
+      await server.close();
+    },
+  };
+}
+
 export async function setupTutorialMcp(): Promise<TutorialMcpTestContext> {
   const mockDb = createMockDb();
   const mockGraphQL = createMockGraphQL();
@@ -126,16 +177,16 @@ export async function setupTutorialMcp(): Promise<TutorialMcpTestContext> {
   const server = new McpServer({ name: "mina-tutorial-test", version: "0.1.0" });
   const getProvider = () => provider;
 
-  registerAccountTools(server, getProvider);
-  registerBlockTools(server, getProvider);
-  registerTransactionTools(server, getProvider);
-  registerNetworkTools(server, getProvider);
-  registerSchemaTools(server, getProvider);
-  registerZkAppTools(server, getProvider);
-  registerTestAccountTools(server, getProvider);
-  registerAdminTools(server, getProvider);
-  registerStateTools(server, getProvider);
-  registerExampleTools(server, getProvider);
+  registerAccountTools(server, getProvider, "tutorial");
+  registerBlockTools(server, getProvider, "tutorial");
+  registerTransactionTools(server, getProvider, "tutorial");
+  registerNetworkTools(server, getProvider, "tutorial");
+  registerSchemaTools(server, getProvider, "tutorial");
+  registerZkAppTools(server, getProvider, "tutorial");
+  registerTestAccountTools(server, getProvider, "tutorial");
+  registerAdminTools(server, getProvider, "tutorial");
+  registerStateTools(server, getProvider, "tutorial");
+  registerExampleTools(server, getProvider, "tutorial");
 
   const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
 

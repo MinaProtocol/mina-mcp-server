@@ -1,12 +1,14 @@
 import { z } from "zod";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
-import { SnapshotProvider } from "../providers/snapshot.js";
-import { TutorialProvider } from "../providers/tutorial.js";
+import { AnyProvider, Mode } from "../server-factory.js";
 
 export function registerSchemaTools(
   server: McpServer,
-  getProvider: () => SnapshotProvider | TutorialProvider
+  getProvider: () => AnyProvider,
+  mode: Mode
 ) {
+  if (mode === "live") return;
+
   server.tool(
     "query_archive_sql",
     "[infra] Execute a read-only SQL query against the archive database. Only SELECT/WITH/EXPLAIN statements are allowed. Query timeout is 10 seconds. Useful for advanced exploration of blockchain data.",

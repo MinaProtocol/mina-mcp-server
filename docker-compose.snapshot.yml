@@ -5,11 +5,26 @@
 #   A) From a local SQL dump (captured with `npm run capture-snapshot`):
 #      SNAPSHOT_DIR=./snapshots/devnet-20260405 docker compose -f docker-compose.snapshot.yml up -d
 #
-#   B) Download the latest devnet dump automatically (like company_dryrun):
+#   B) Download the latest dump automatically:
+#      # devnet (default)
 #      docker compose -f docker-compose.snapshot.yml --profile download up -d
+#
+#      # mainnet
+#      ARCHIVE_DUMP_PREFIX=mainnet-archive-dump \
+#        docker compose -f docker-compose.snapshot.yml --profile download up -d
+#
+#      # mesa (PREFLIGHT — prefix is internal ops naming and may change without notice)
+#      ARCHIVE_DUMP_PREFIX=hetzner-pre-mesa-1-archive-dump ARCHIVE_DUMP_HOUR=1200 \
+#        docker compose -f docker-compose.snapshot.yml --profile download up -d
 #
 # Then run the MCP server:
 #   MINA_MCP_MODE=snapshot node dist/index.js
+#
+# Notes:
+#   - Devnet + mainnet dumps are published once daily at _0000 UTC.
+#   - Mesa dumps are published twice daily (_0000 and _1200 UTC).
+#   - If today's dump hasn't landed yet, override DUMP_DATE explicitly:
+#       DUMP_DATE=2026-05-10_0000 docker compose ...
 
 services:
   archive-db:
@@ -43,7 +58,9 @@ services:
       - -c
       - |
         set -eox pipefail
-        DUMP_DATE=$$(date +%F_0000)
+        # Hour suffix: 0000 (midnight UTC) for stable nets, 1200 also works for mesa.
+        DUMP_HOUR="${ARCHIVE_DUMP_HOUR:-0000}"
+        DUMP_DATE="${DUMP_DATE:-$$(date +%F)_$${DUMP_HOUR}}"
         DUMP_URL="${ARCHIVE_DUMP_BASE_URL:-https://storage.googleapis.com/mina-archive-dumps}/${ARCHIVE_DUMP_PREFIX:-devnet-archive-dump}-$${DUMP_DATE}.sql.tar.gz"
         echo "Downloading archive dump: $${DUMP_URL}"
         curl -fSL -O "$${DUMP_URL}"
