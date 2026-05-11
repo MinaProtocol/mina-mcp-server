@@ -52,17 +52,24 @@ jobs:
 
       - name: Wait for Archive-Node-API
         run: |
+          # Use the same networkState query the tests use — { __typename } passes
+          # as soon as the GraphQL server is up, but the networkState resolver
+          # needs blocks in the archive DB to compute heights. If we don't wait
+          # for the heavier query to succeed, isConnected()/getNetworkState
+          # fail seconds into the test run.
+          PROBE='{"query":"{ networkState { maxBlockHeight { canonicalMaxBlockHeight pendingMaxBlockHeight } } }"}'
           for i in $(seq 1 60); do
-            if curl -fsS -X POST -H "Content-Type: application/json" \
-                 -d '{"query":"{ __typename }"}' \
-                 http://localhost:8282 >/dev/null 2>&1; then
-              echo "Archive-Node-API ready after ${i} attempts"
+            RESP=$(curl -fsS --max-time 5 -X POST -H "Content-Type: application/json" \
+                     -d "$PROBE" http://localhost:8282 2>/dev/null || echo "")
+            if echo "$RESP" | grep -q '"canonicalMaxBlockHeight"' && \
+               ! echo "$RESP" | grep -q '"errors"'; then
+              echo "Archive-Node-API networkState ready after ${i} attempts: $RESP"
               exit 0
             fi
-            echo "Attempt ${i}/60: Archive-Node-API not ready yet..."
+            echo "Attempt ${i}/60: networkState not usable yet — ${RESP:-no response}"
             sleep 5
           done
-          echo "Archive-Node-API never came up"
+          echo "Archive-Node-API networkState never reached a usable state"
           docker logs $(docker ps -q --filter "ancestor=o1labs/mina-local-network:compatible-latest-lightnet") 2>&1 | tail -50 || true
           exit 1
 
