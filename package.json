@@ -1,6 +1,6 @@
 {
   "name": "mina-mcp-server",
-  "version": "0.2.1",
+  "version": "0.3.0",
   "description": "MCP server for Mina Protocol daemon and archive node",
   "type": "module",
   "main": "dist/index.js",
