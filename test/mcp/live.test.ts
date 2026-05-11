@@ -94,6 +94,10 @@ describe("MCP Server - Live Mode", () => {
       expect(snapshot.mempool.size).toBe(0);
       expect(Array.isArray(snapshot.hints)).toBe(true);
       expect(snapshot.hints.some((h: string) => h.includes("public read-only"))).toBe(true);
+      // Devnet has a faucet — hint should surface the URL so an LLM can hand it to a human.
+      expect(snapshot.hints.some((h: string) => h.includes("faucet.minaprotocol.com"))).toBe(true);
+      // Rosetta endpoint should be surfaced too.
+      expect(snapshot.hints.some((h: string) => h.includes("devnet-rosetta.gcp.o1test.net"))).toBe(true);
       // Stable network should NOT carry a preflight warning.
       expect(snapshot.hints.some((h: string) => h.includes("PREFLIGHT"))).toBe(false);
       // Live-mode snapshot intentionally omits accounts + reset (those don't exist here).
@@ -121,6 +125,8 @@ describe("MCP Server - Live Mode", () => {
         expect(snapshot.network.stability).toBe("preflight");
         // First hint MUST be the preflight warning so it shows up on the first scan.
         expect(snapshot.hints[0]).toMatch(/PREFLIGHT/);
+        // Mesa is also faucet-fundable (shared form with devnet).
+        expect(snapshot.hints.some((h: string) => h.includes("faucet.minaprotocol.com"))).toBe(true);
       } finally {
         await mesaCtx.cleanup();
       }

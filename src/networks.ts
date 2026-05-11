@@ -22,6 +22,17 @@ export interface NetworkConfig {
   stability: NetworkStability;
   daemonGraphql: string;
   archiveNodeApi: string;
+  // Human-facing faucet URL for funding accounts on this network. The MCP
+  // server can't call it (it's a web form, not an API), but surfacing it in
+  // describe_state lets an LLM hand a human the right link in one tool call.
+  // Mainnet has none — real MINA is acquired via exchanges.
+  faucetUrl?: string;
+  // Mina-Rosetta endpoint for this network. Standard Rosetta API
+  // (Coinbase spec) — usable for exchange-style integrations and
+  // construction flows. The MCP server doesn't proxy it today; the URL is
+  // surfaced via describe_state so an LLM/agent knows where to point a
+  // Rosetta-aware tool or human collaborator.
+  rosettaUrl?: string;
   // Snapshot mode (docker-compose.snapshot.yml --profile download): the dump
   // is fetched from
   //   https://storage.googleapis.com/mina-archive-dumps/${archiveDumpPrefix}-${date}_${hour}.sql.tar.gz
@@ -37,6 +48,9 @@ export const NETWORKS: Record<NetworkName, NetworkConfig> = {
     stability: "stable",
     daemonGraphql: "https://devnet-plain-1.gcp.o1test.net/graphql",
     archiveNodeApi: "https://devnet-archive-node-api.gcp.o1test.net",
+    // Shared faucet UI — network is selectable in the form.
+    faucetUrl: "https://faucet.minaprotocol.com",
+    rosettaUrl: "https://devnet-rosetta.gcp.o1test.net",
     archiveDumpPrefix: "devnet-archive-dump",
     archiveDumpCadence: "daily",
   },
@@ -46,6 +60,8 @@ export const NETWORKS: Record<NetworkName, NetworkConfig> = {
     stability: "stable",
     daemonGraphql: "https://mainnet-plain-1.gcp.o1test.net/graphql",
     archiveNodeApi: "https://archive-node-api.gcp.o1test.net",
+    // No faucet — production network, real MINA is acquired via exchanges.
+    rosettaUrl: "https://mainnet-rosetta.gcp.o1test.net",
     archiveDumpPrefix: "mainnet-archive-dump",
     archiveDumpCadence: "daily",
   },
@@ -57,6 +73,9 @@ export const NETWORKS: Record<NetworkName, NetworkConfig> = {
     stability: "preflight",
     daemonGraphql: "https://plain-1-graphql.mina-mesa-network.gcp.o1test.net/graphql",
     archiveNodeApi: "https://mesa-archive-node-api.gcp.o1test.net",
+    // Same faucet UI as devnet; mesa is one of the network options in the form.
+    faucetUrl: "https://faucet.minaprotocol.com",
+    rosettaUrl: "https://rosetta.mina-mesa-network.gcp.o1test.net",
     // Preflight ops-naming, not a stable convention — likely to change when
     // mesa graduates. Document this prominently anywhere it's surfaced to users.
     archiveDumpPrefix: "hetzner-pre-mesa-1-archive-dump",
