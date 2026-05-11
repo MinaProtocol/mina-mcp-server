@@ -34,6 +34,12 @@ describe("MCP Server - Live Mode", () => {
         "get_sync_status",
         "get_transaction_status",
         "list_examples",
+        // Rosetta Data API — registered when network has rosettaUrl + rosettaNetwork.
+        "rosetta_account",
+        "rosetta_block",
+        "rosetta_mempool",
+        "rosetta_mempool_transaction",
+        "rosetta_status",
       ].sort();
       expect(toolNames).toEqual(expected);
 
@@ -96,7 +102,8 @@ describe("MCP Server - Live Mode", () => {
       expect(snapshot.hints.some((h: string) => h.includes("public read-only"))).toBe(true);
       // Devnet has a faucet — hint should surface the URL so an LLM can hand it to a human.
       expect(snapshot.hints.some((h: string) => h.includes("faucet.minaprotocol.com"))).toBe(true);
-      // Rosetta endpoint should be surfaced too.
+      // Rosetta endpoint should be surfaced — both the rosetta_* tool family and the URL.
+      expect(snapshot.hints.some((h: string) => h.includes("rosetta_status"))).toBe(true);
       expect(snapshot.hints.some((h: string) => h.includes("devnet-rosetta.gcp.o1test.net"))).toBe(true);
       // Stable network should NOT carry a preflight warning.
       expect(snapshot.hints.some((h: string) => h.includes("PREFLIGHT"))).toBe(false);
@@ -130,6 +137,59 @@ describe("MCP Server - Live Mode", () => {
       } finally {
         await mesaCtx.cleanup();
       }
+    });
+  });
+
+  describe("rosetta tools", () => {
+    it("rosetta_status returns the underlying client response", async () => {
+      const fixture = { current_block_identifier: { index: 7, hash: "h7" }, sync_status: { synced: true } };
+      (ctx.mockRosetta.networkStatus as ReturnType<typeof vi.fn>).mockResolvedValueOnce(fixture);
+
+      const result = await ctx.client.callTool({ name: "rosetta_status", arguments: {} });
+      const text = (result.content as Array<{ type: string; text: string }>)[0].text;
+      expect(JSON.parse(text)).toEqual(fixture);
+    });
+
+    it("rosetta_block by index forwards a {index} block_identifier", async () => {
+      (ctx.mockRosetta.block as ReturnType<typeof vi.fn>).mockResolvedValueOnce({ block: { block_identifier: { index: 100, hash: "h100" } } });
+
+      const result = await ctx.client.callTool({ name: "rosetta_block", arguments: { index: 100 } });
+      const text = (result.content as Array<{ type: string; text: string }>)[0].text;
+      expect(JSON.parse(text)).toMatchObject({ block: { block_identifier: { index: 100 } } });
+      expect(ctx.mockRosetta.block).toHaveBeenCalledWith({ index: 100 });
+    });
+
+    it("rosetta_block rejects when both index and hash are supplied", async () => {
+      const result = await ctx.client.callTool({ name: "rosetta_block", arguments: { index: 1, hash: "h1" } });
+      const text = (result.content as Array<{ type: string; text: string }>)[0].text;
+      expect(text).toMatch(/exactly one of/);
+      expect(ctx.mockRosetta.block).not.toHaveBeenCalled();
+    });
+
+    it("rosetta_block rejects when neither index nor hash is supplied", async () => {
+      const result = await ctx.client.callTool({ name: "rosetta_block", arguments: {} });
+      const text = (result.content as Array<{ type: string; text: string }>)[0].text;
+      expect(text).toMatch(/exactly one of/);
+      expect(ctx.mockRosetta.block).not.toHaveBeenCalled();
+    });
+
+    it("rosetta_account omits block_identifier when none is provided", async () => {
+      (ctx.mockRosetta.accountBalance as ReturnType<typeof vi.fn>).mockResolvedValueOnce({ balances: [] });
+      await ctx.client.callTool({ name: "rosetta_account", arguments: { address: "B62qtest" } });
+      expect(ctx.mockRosetta.accountBalance).toHaveBeenCalledWith("B62qtest", undefined);
+    });
+
+    it("rosetta_account passes a {index} block_identifier when blockIndex is set", async () => {
+      (ctx.mockRosetta.accountBalance as ReturnType<typeof vi.fn>).mockResolvedValueOnce({ balances: [] });
+      await ctx.client.callTool({ name: "rosetta_account", arguments: { address: "B62qtest", blockIndex: 42 } });
+      expect(ctx.mockRosetta.accountBalance).toHaveBeenCalledWith("B62qtest", { index: 42 });
+    });
+
+    it("rosetta tool errors surface the safeCall label prefix", async () => {
+      (ctx.mockRosetta.networkStatus as ReturnType<typeof vi.fn>).mockRejectedValueOnce(new Error("upstream 502"));
+      const result = await ctx.client.callTool({ name: "rosetta_status", arguments: {} });
+      const text = (result.content as Array<{ type: string; text: string }>)[0].text;
+      expect(text).toBe("rosetta_status: upstream 502");
     });
   });
 

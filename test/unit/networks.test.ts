@@ -41,10 +41,17 @@ describe("public network table", () => {
     expect(NETWORKS.mainnet.faucetUrl).toBeUndefined();
   });
 
-  it("every network declares a Mina-Rosetta endpoint", () => {
+  it("every network declares a Mina-Rosetta endpoint + Rosetta network identifier", () => {
     for (const cfg of Object.values(NETWORKS)) {
       expect(cfg.rosettaUrl).toMatch(/^https?:\/\//);
+      expect(typeof cfg.rosettaNetwork).toBe("string");
+      expect(cfg.rosettaNetwork!.length).toBeGreaterThan(0);
     }
+    // Mesa's Rosetta endpoint calls itself "testnet", not "mesa" —
+    // verified via /network/list. Make sure we don't regress on this.
+    expect(NETWORKS.mesa.rosettaNetwork).toBe("testnet");
+    expect(NETWORKS.devnet.rosettaNetwork).toBe("devnet");
+    expect(NETWORKS.mainnet.rosettaNetwork).toBe("mainnet");
   });
 
   it("preflightWarning returns a warning for preflight networks and null otherwise", () => {

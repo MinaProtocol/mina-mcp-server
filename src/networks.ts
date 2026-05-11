@@ -29,10 +29,12 @@ export interface NetworkConfig {
   faucetUrl?: string;
   // Mina-Rosetta endpoint for this network. Standard Rosetta API
   // (Coinbase spec) — usable for exchange-style integrations and
-  // construction flows. The MCP server doesn't proxy it today; the URL is
-  // surfaced via describe_state so an LLM/agent knows where to point a
-  // Rosetta-aware tool or human collaborator.
+  // construction flows.
   rosettaUrl?: string;
+  // The `network` field inside Rosetta's `network_identifier` ({blockchain,
+  // network}) for this endpoint. Often matches `name`, but NOT always —
+  // mesa's Rosetta uses "testnet". Only meaningful when rosettaUrl is set.
+  rosettaNetwork?: string;
   // Snapshot mode (docker-compose.snapshot.yml --profile download): the dump
   // is fetched from
   //   https://storage.googleapis.com/mina-archive-dumps/${archiveDumpPrefix}-${date}_${hour}.sql.tar.gz
@@ -51,6 +53,7 @@ export const NETWORKS: Record<NetworkName, NetworkConfig> = {
     // Shared faucet UI — network is selectable in the form.
     faucetUrl: "https://faucet.minaprotocol.com",
     rosettaUrl: "https://devnet-rosetta.gcp.o1test.net",
+    rosettaNetwork: "devnet",
     archiveDumpPrefix: "devnet-archive-dump",
     archiveDumpCadence: "daily",
   },
@@ -62,6 +65,7 @@ export const NETWORKS: Record<NetworkName, NetworkConfig> = {
     archiveNodeApi: "https://archive-node-api.gcp.o1test.net",
     // No faucet — production network, real MINA is acquired via exchanges.
     rosettaUrl: "https://mainnet-rosetta.gcp.o1test.net",
+    rosettaNetwork: "mainnet",
     archiveDumpPrefix: "mainnet-archive-dump",
     archiveDumpCadence: "daily",
   },
@@ -76,6 +80,10 @@ export const NETWORKS: Record<NetworkName, NetworkConfig> = {
     // Same faucet UI as devnet; mesa is one of the network options in the form.
     faucetUrl: "https://faucet.minaprotocol.com",
     rosettaUrl: "https://rosetta.mina-mesa-network.gcp.o1test.net",
+    // Mesa's Rosetta endpoint exposes itself as "testnet" (not "mesa") —
+    // verified via /network/list. Keep this exact string in sync with the
+    // endpoint, otherwise every Rosetta call will get rejected.
+    rosettaNetwork: "testnet",
     // Preflight ops-naming, not a stable convention — likely to change when
     // mesa graduates. Document this prominently anywhere it's surfaced to users.
     archiveDumpPrefix: "hetzner-pre-mesa-1-archive-dump",

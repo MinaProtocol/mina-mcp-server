@@ -16,9 +16,10 @@ function faucetHint(cfg: NetworkConfig): string | null {
 function rosettaHint(cfg: NetworkConfig): string | null {
   if (!cfg.rosettaUrl) return null;
   return (
-    `A Mina-Rosetta endpoint for ${cfg.name} is available at ${cfg.rosettaUrl} ` +
-    `(Coinbase Rosetta spec). This MCP server does not proxy it; surface it to ` +
-    `the user if they need standardized block/account/balance/construction APIs.`
+    `Mina-Rosetta (Coinbase spec) Data API is available on ${cfg.name} via ` +
+    `\`rosetta_status\`, \`rosetta_account\`, \`rosetta_block\`, \`rosetta_mempool\`, ` +
+    `and \`rosetta_mempool_transaction\` — use these when the caller wants ` +
+    `standardized Rosetta-format responses. Underlying endpoint: ${cfg.rosettaUrl}.`
   );
 }
 
