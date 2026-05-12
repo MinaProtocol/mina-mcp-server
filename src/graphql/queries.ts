@@ -135,9 +135,11 @@ export const QUERIES = {
   // Both mutations accept an optional $signature. When null, the daemon
   // signs with its own keys (tutorial-mode lightnet). When set, the daemon
   // verifies the provided signature and submits — required path for live
-  // mode against public daemons that don't hold user keys. JSON.stringify
-  // drops `undefined` from variables, so callers that don't pass a
-  // signature still see the daemon-signed path.
+  // mode against public daemons that don't hold user keys.
+  //
+  // CAUTION: an explicit `signature: null` must be passed by callers that
+  // don't want client-side signing. Omitting the variable triggers the
+  // daemon's "Missing variable `signature`" error — declared but absent.
   sendPayment: `mutation SendPayment($input: SendPaymentInput!, $signature: SignatureInput) {
     sendPayment(input: $input, signature: $signature) {
       payment {

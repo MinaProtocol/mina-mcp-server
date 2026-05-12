@@ -194,6 +194,11 @@ describe("TutorialProvider", () => {
       const call = (mockGraphql.query as ReturnType<typeof vi.fn>).mock.calls[0];
       expect(call[1].input.from).toBe("B62qfrom");
       expect(call[1].input.amount).toBe("1000000000");
+      // Regression guard for the live-write-wallets change: the mutation
+      // declares $signature, so an explicit null must be passed when the
+      // daemon should sign. Omitting it triggers "Missing variable
+      // `signature`" on the daemon side.
+      expect(call[1].signature).toBeNull();
     });
 
     it("should throw on payment errors", async () => {
@@ -208,6 +213,15 @@ describe("TutorialProvider", () => {
   });
 
   describe("sendDelegation", () => {
+    it("passes signature: null so the daemon signs (regression guard for #21)", async () => {
+      (mockGraphql.query as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
+        data: { sendDelegation: { delegation: { hash: "h" } } },
+      });
+      await provider.sendDelegation({ from: "B62q", to: "B62q", fee: "1" });
+      const call = (mockGraphql.query as ReturnType<typeof vi.fn>).mock.calls[0];
+      expect(call[1].signature).toBeNull();
+    });
+
     it("should send delegation via GraphQL", async () => {
       (mockGraphql.query as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
         data: { sendDelegation: { delegation: { hash: "delhash" } } },
