@@ -8,7 +8,7 @@ export function registerTransactionTools(
   getProvider: () => AnyProvider,
   mode: Mode
 ) {
-  if (mode !== "live") {
+  if (mode === "tutorial") {
     server.tool(
       "get_transaction",
       "[business] Look up a transaction by its hash in the archive database.",

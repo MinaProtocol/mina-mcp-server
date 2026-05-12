@@ -1,6 +1,13 @@
 /**
  * Integration tests for snapshot mode against a real captured archive DB.
  *
+ * Snapshot mode is now a "schema explorer": SQL access (query_archive_sql,
+ * get_archive_schema) + a DB-connectivity probe (get_sync_status) + the
+ * example library. Everything else (get_account, get_block, list_blocks,
+ * get_transaction, search_transactions, get_archive_stats, etc.) was
+ * dropped — it's available in tutorial mode where you actually have a
+ * live lightnet to validate against.
+ *
  * These run after the lightnet integration tests capture a snapshot
  * and load it into a standalone Postgres instance.
  *
@@ -21,8 +28,9 @@ import { registerNetworkTools } from "../../src/tools/network.js";
 import { registerSchemaTools } from "../../src/tools/schema.js";
 import { registerZkAppTools } from "../../src/tools/zkapps.js";
 import { registerTestAccountTools } from "../../src/tools/test-accounts.js";
+import { registerExampleTools } from "../../src/tools/examples.js";
 
-describe("Snapshot Mode Integration", () => {
+describe("Snapshot Mode Integration (schema-only)", () => {
   let client: Client;
   let server: McpServer;
   let db: ArchiveDB;
@@ -41,6 +49,7 @@ describe("Snapshot Mode Integration", () => {
     registerSchemaTools(server, getProvider, "snapshot");
     registerZkAppTools(server, getProvider, "snapshot");
     registerTestAccountTools(server, getProvider, "snapshot");
+    registerExampleTools(server, getProvider, "snapshot");
 
     const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
     client = new Client({ name: "snapshot-test-client", version: "0.1.0" });
@@ -54,28 +63,19 @@ describe("Snapshot Mode Integration", () => {
     await db.close();
   });
 
-  it("registers the DB-backed snapshot toolset (tutorial- and live-only tools are filtered out)", async () => {
+  it("registers only the schema-only toolset", async () => {
     const result = await client.listTools();
     const names = result.tools.map((t) => t.name).sort();
-    // Snapshot mode registers the archive-DB tools plus the always-on examples
-    // pair; tutorial-only and live-only tools must NOT be registered.
-    expect(names).toContain("get_account");
-    expect(names).toContain("get_block");
-    expect(names).toContain("list_blocks");
-    expect(names).toContain("get_transaction");
-    expect(names).toContain("search_transactions");
-    expect(names).toContain("get_staking_ledger");
-    expect(names).toContain("get_sync_status");
-    expect(names).toContain("get_archive_stats");
-    expect(names).toContain("query_archive_sql");
-    expect(names).toContain("get_archive_schema");
-    // Filtered out:
-    for (const forbidden of ["faucet", "send_payment", "send_delegation", "get_tracked_accounts", "get_best_chain", "get_events", "get_actions", "get_archive_blocks", "get_network_state"]) {
-      expect(names).not.toContain(forbidden);
-    }
+    expect(names).toEqual([
+      "get_archive_schema",
+      "get_example",
+      "get_sync_status",
+      "list_examples",
+      "query_archive_sql",
+    ].sort());
   });
 
-  it("get_sync_status should return snapshot stats", async () => {
+  it("get_sync_status returns snapshot DB stats", async () => {
     const result = await client.callTool({ name: "get_sync_status", arguments: {} });
     const text = (result.content as Array<{ type: string; text: string }>)[0].text;
     const parsed = JSON.parse(text);
@@ -83,21 +83,7 @@ describe("Snapshot Mode Integration", () => {
     expect(Number(parsed.total_blocks)).toBeGreaterThan(0);
   });
 
-  it("list_blocks should return blocks from archive", async () => {
-    const result = await client.callTool({ name: "list_blocks", arguments: { limit: 3 } });
-    const text = (result.content as Array<{ type: string; text: string }>)[0].text;
-    const blocks = JSON.parse(text);
-    expect(blocks.length).toBeGreaterThan(0);
-  });
-
-  it("get_archive_stats should return statistics", async () => {
-    const result = await client.callTool({ name: "get_archive_stats", arguments: {} });
-    const text = (result.content as Array<{ type: string; text: string }>)[0].text;
-    const stats = JSON.parse(text);
-    expect(Number(stats.total_blocks)).toBeGreaterThan(0);
-  });
-
-  it("get_archive_schema should return table definitions", async () => {
+  it("get_archive_schema returns table definitions for the canonical archive tables", async () => {
     const result = await client.callTool({ name: "get_archive_schema", arguments: {} });
     const text = (result.content as Array<{ type: string; text: string }>)[0].text;
     const schema = JSON.parse(text);
@@ -105,7 +91,7 @@ describe("Snapshot Mode Integration", () => {
     expect(schema.blocks.length).toBeGreaterThan(0);
   });
 
-  it("query_archive_sql should execute read-only queries", async () => {
+  it("query_archive_sql executes read-only queries against the real archive", async () => {
     const result = await client.callTool({
       name: "query_archive_sql",
       arguments: { sql: "SELECT count(*) as count FROM blocks" },
@@ -115,7 +101,7 @@ describe("Snapshot Mode Integration", () => {
     expect(Number(parsed.rows[0].count)).toBeGreaterThan(0);
   });
 
-  it("query_archive_sql should reject write queries", async () => {
+  it("query_archive_sql rejects write queries", async () => {
     const result = await client.callTool({
       name: "query_archive_sql",
       arguments: { sql: "DROP TABLE blocks" },
@@ -124,11 +110,11 @@ describe("Snapshot Mode Integration", () => {
     expect(text).toContain("Query error");
   });
 
-  it("calling a tutorial-only tool yields an MCP 'tool not found' error (it is not registered in snapshot mode)", async () => {
-    // Filtering happens at registration time now, so tutorial-only tools
-    // aren't even on the wire. Depending on the MCP SDK version the
-    // unknown-tool path either rejects the promise or resolves with
-    // an `MCP error -32602: Tool X not found` text content — accept both.
+  it("dropped-from-snapshot tools surface MCP 'tool not found' errors", async () => {
+    // After the schema-only reduction these tools live in tutorial mode
+    // only. Depending on SDK version, calling an unregistered tool either
+    // rejects or resolves with `MCP error -32602: Tool X not found` —
+    // accept both shapes.
     const expectToolNotFound = async (name: string, args: Record<string, unknown> = {}) => {
       try {
         const result = await client.callTool({ name, arguments: args });
@@ -138,7 +124,12 @@ describe("Snapshot Mode Integration", () => {
         expect((e as Error).message).toMatch(new RegExp(`Tool ${name} not found`));
       }
     };
-    await expectToolNotFound("send_payment", { from: "B62qA", to: "B62qB", amount: "1000000000" });
-    await expectToolNotFound("faucet");
+    for (const name of [
+      "get_account", "get_block", "list_blocks", "get_transaction",
+      "search_transactions", "get_archive_stats", "get_staking_ledger",
+      "faucet", "send_payment",
+    ]) {
+      await expectToolNotFound(name);
+    }
   });
 });

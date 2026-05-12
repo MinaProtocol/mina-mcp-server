@@ -81,7 +81,7 @@ export function registerNetworkTools(
     );
   }
 
-  if (mode !== "live") {
+  if (mode === "tutorial") {
     server.tool(
       "get_archive_stats",
       "[infra] Get statistics from the archive database: total blocks, commands, accounts, etc.",

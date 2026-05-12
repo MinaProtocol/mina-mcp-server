@@ -8,39 +8,41 @@ export function registerBlockTools(
   getProvider: () => AnyProvider,
   mode: Mode
 ) {
-  server.tool(
-    "get_block",
-    "[business] Get a block by state hash or height. In tutorial mode, can also query live blocks from the daemon. In live mode, a stateHash is required (use get_archive_blocks to discover one).",
-    {
-      stateHash: z.string().optional().describe("Block state hash"),
-      height: z.number().optional().describe("Block height"),
-    },
-    async ({ stateHash, height }) => {
-      const provider = getProvider();
+  if (mode !== "snapshot") {
+    server.tool(
+      "get_block",
+      "[business] Get a block by state hash or height. In tutorial mode, queries the live daemon first and falls back to the archive DB. In live mode, a stateHash is required (use get_archive_blocks to discover one).",
+      {
+        stateHash: z.string().optional().describe("Block state hash"),
+        height: z.number().optional().describe("Block height"),
+      },
+      async ({ stateHash, height }) => {
+        const provider = getProvider();
 
-      if (provider instanceof TutorialProvider && (stateHash || height)) {
-        const result = await provider.getBlockLive(stateHash, height);
-        if (result) {
-          return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
+        if (provider instanceof TutorialProvider && (stateHash || height)) {
+          const result = await provider.getBlockLive(stateHash, height);
+          if (result) {
+            return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
+          }
         }
-      }
 
-      // Fall back to archive DB
-      const key = stateHash ?? height;
-      if (!key) {
-        return {
-          content: [{ type: "text", text: "Provide either stateHash or height" }],
-        };
+        // Fall back to archive DB (tutorial mode only — live has no DB).
+        const key = stateHash ?? height;
+        if (!key) {
+          return {
+            content: [{ type: "text", text: "Provide either stateHash or height" }],
+          };
+        }
+        const result = await provider.getBlock(key);
+        if (!result) {
+          return { content: [{ type: "text", text: "Block not found" }] };
+        }
+        return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
       }
-      const result = await provider.getBlock(key);
-      if (!result) {
-        return { content: [{ type: "text", text: "Block not found" }] };
-      }
-      return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
-    }
-  );
+    );
+  }
 
-  if (mode !== "live") {
+  if (mode === "tutorial") {
     server.tool(
       "list_blocks",
       "[business] List blocks from the archive database, ordered by height descending.",

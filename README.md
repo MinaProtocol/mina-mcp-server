@@ -8,8 +8,9 @@ MCP (Model Context Protocol) server for the [Mina Protocol](https://minaprotocol
 
 - **24+ MCP tools** for querying accounts, blocks, transactions, zkApp events/actions, network status, and more
 - **Two operating modes:**
-  - **Snapshot** — read-only access to a frozen archive database (no live network required, but Postgres is)
+  - **Snapshot** — **schema explorer only**: SQL access (`query_archive_sql`, `get_archive_schema`) + DB connectivity probe. Read-only against a frozen archive Postgres dump. Useful for ad-hoc analytics over historical chain data.
   - **Tutorial** — full read/write access to a live Mina lightnet (daemon, archive, test accounts)
+  - **Live** — read-only proxy to a public Mina network (devnet/mainnet/mesa); no local infra
 - **Safe SQL access** — read-only queries against the archive database with timeout protection
 - **Test account faucet** — acquire/release pre-funded accounts for testing (tutorial mode)
 
@@ -187,39 +188,44 @@ Key variables:
 
 ## MCP Tools
 
-### Available in Both Modes
+Tool registration is **mode-aware** — tools whose backing infra isn't available in a given mode aren't registered at all (so they don't show up in `tools/list`, and an LLM never reasons about them).
+
+### Snapshot mode (schema explorer)
 
 | Tool | Description |
 |------|-------------|
-| `get_account` | Get account info by public key |
-| `get_block` | Get a block by state hash or height |
-| `list_blocks` | List blocks with pagination and status filter |
-| `get_transaction` | Look up a transaction by hash |
-| `search_transactions` | Search transactions by sender/receiver/amount |
-| `get_staking_ledger` | Get staking ledger entries |
-| `get_sync_status` | Get daemon or archive status |
-| `get_archive_stats` | Get archive database statistics |
-| `query_archive_sql` | Execute read-only SQL against the archive DB |
-| `get_archive_schema` | Inspect archive database schema |
+| `query_archive_sql` | Execute read-only SQL against the local archive Postgres |
+| `get_archive_schema` | Inspect archive DB table/column metadata |
+| `get_sync_status` | DB connectivity probe + basic archive stats |
+| `list_examples` / `get_example` | Discover canned SQL workflows (e.g. `custom_sql`) |
 
-### Tutorial Mode Only
+### Tutorial mode (live lightnet — superset of snapshot)
+
+All snapshot tools, plus:
 
 | Tool | Description |
 |------|-------------|
-| `get_best_chain` | Get the current best chain from the live daemon |
-| `send_payment` | Send a MINA payment |
-| `send_delegation` | Delegate stake to a block producer |
-| `get_transaction_status` | Check pending transaction status |
-| `get_mempool` | View pending transactions in the mempool |
-| `get_genesis_constants` | Get genesis constants (coinbase, fees) |
-| `get_network_id` | Get the network identifier |
-| `get_tracked_accounts` | List daemon-tracked wallet accounts |
-| `get_events` | Get zkApp events via Archive-Node-API |
-| `get_actions` | Get zkApp actions via Archive-Node-API |
-| `get_archive_blocks` | Get blocks from Archive-Node-API |
-| `get_network_state` | Get network state from Archive-Node-API |
-| `faucet` | Acquire a pre-funded test account (1550 MINA) |
-| `return_account` | Release a test account back to the pool |
+| `get_account` / `get_block` | Live state from the daemon, with archive-DB fallback |
+| `get_staking_ledger` / `list_blocks` / `get_transaction` / `search_transactions` | Archive-DB reads |
+| `get_archive_stats` | Tally of blocks / commands / accounts in the archive |
+| `get_best_chain` / `get_mempool` / `get_transaction_status` | Live daemon queries |
+| `get_genesis_constants` / `get_network_id` / `get_tracked_accounts` | Daemon metadata |
+| `get_events` / `get_actions` / `get_archive_blocks` / `get_network_state` | Archive-Node-API |
+| `faucet` / `return_account` / `reset_session` | Pre-funded test account pool (1550 MINA each) |
+| `send_payment` / `send_delegation` | Daemon-signed transactions |
+| `freeze_reset` / `unfreeze_reset` / `freeze_status` | Pause the periodic chain reset for human demos |
+| `describe_state` | One-shot snapshot of chain + mempool + accounts + reset state |
+
+### Live mode (public Mina network — read-only)
+
+| Tool | Description |
+|------|-------------|
+| `get_account` / `get_block` / `get_best_chain` / `get_mempool` / `get_transaction_status` | Live daemon queries |
+| `get_sync_status` / `get_genesis_constants` / `get_network_id` | Daemon metadata |
+| `get_events` / `get_actions` / `get_archive_blocks` / `get_network_state` | Archive-Node-API |
+| `rosetta_status` / `rosetta_account` / `rosetta_block` / `rosetta_mempool` / `rosetta_mempool_transaction` | Mina-Rosetta Data API (Coinbase spec) |
+| `describe_state` | Live snapshot incl. preflight + Rosetta + faucet hints |
+| `list_examples` / `get_example` | Live-mode-applicable workflows |
 
 ## Development
 
