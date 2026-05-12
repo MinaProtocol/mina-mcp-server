@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
+import MinaSigner from "mina-signer";
 import { ArchiveDB } from "./db/archive.js";
 import { GraphQLClient } from "./graphql/client.js";
 import { ArchiveNodeAPI } from "./graphql/archive-api.js";
@@ -10,9 +11,12 @@ import { ResetController } from "./reset/controller.js";
 import { SnapshotProvider } from "./providers/snapshot.js";
 import { TutorialProvider } from "./providers/tutorial.js";
 import { LiveProvider } from "./providers/live.js";
+import { LiveWriteProvider } from "./providers/live-write.js";
 import { AnyProvider, Mode, buildMcpServer } from "./server-factory.js";
 import { startHttpServer } from "./transports/http.js";
 import { NETWORKS, NetworkName, resolveNetwork } from "./networks.js";
+import { loadWallets, WalletLoadError } from "./wallets/loader.js";
+import { WalletRegistry } from "./wallets/types.js";
 
 type Transport = "stdio" | "http";
 
@@ -21,6 +25,8 @@ interface ParsedArgs {
   transport: Transport;
   httpPort: number;
   network?: NetworkName;
+  wallets?: string;
+  allowMainnetWrites: boolean;
 }
 
 function parseArgs(): ParsedArgs {
@@ -28,6 +34,8 @@ function parseArgs(): ParsedArgs {
   let mode: Mode = "snapshot";
   let transport: Transport = "stdio";
   let network: NetworkName | undefined;
+  let wallets: string | undefined;
+  let allowMainnetWrites = false;
 
   for (let i = 0; i < args.length; i++) {
     if (args[i] === "--mode" && args[i + 1]) {
@@ -51,6 +59,10 @@ function parseArgs(): ParsedArgs {
         process.exit(1);
       }
       network = val as NetworkName;
+    } else if (args[i] === "--wallets" && args[i + 1]) {
+      wallets = args[i + 1];
+    } else if (args[i] === "--allow-mainnet-writes") {
+      allowMainnetWrites = true;
     }
   }
 
@@ -65,6 +77,8 @@ function parseArgs(): ParsedArgs {
   if (envNetwork && envNetwork in NETWORKS) {
     network = envNetwork as NetworkName;
   }
+  if (process.env.MINA_MCP_WALLETS) wallets = process.env.MINA_MCP_WALLETS;
+  if (process.env.MINA_MCP_ALLOW_MAINNET_WRITES === "1") allowMainnetWrites = true;
 
   if (mode === "live" && !network) {
     console.error(
@@ -76,6 +90,18 @@ function parseArgs(): ParsedArgs {
     console.error(`--network is only valid with --mode live (got mode '${mode}').`);
     process.exit(1);
   }
+  if (wallets && mode !== "live") {
+    console.error(`--wallets is only valid with --mode live (got mode '${mode}').`);
+    process.exit(1);
+  }
+  if (wallets && network === "mainnet" && !allowMainnetWrites) {
+    console.error(
+      `Refusing to load wallets against mainnet without --allow-mainnet-writes ` +
+        `(or MINA_MCP_ALLOW_MAINNET_WRITES=1). This is a deliberate safety gate to ` +
+        `prevent an agent from accidentally spending real MINA because of a config typo.`
+    );
+    process.exit(1);
+  }
 
   const httpPort = Number.parseInt(process.env.MINA_MCP_HTTP_PORT ?? "3000", 10);
   if (!Number.isFinite(httpPort) || httpPort <= 0) {
@@ -83,7 +109,7 @@ function parseArgs(): ParsedArgs {
     process.exit(1);
   }
 
-  return { mode, transport, httpPort, network };
+  return { mode, transport, httpPort, network, wallets, allowMainnetWrites };
 }
 
 function logProviderHealth(provider: AnyProvider, mode: Mode, db: ArchiveDB) {
@@ -113,14 +139,71 @@ function logProviderHealth(provider: AnyProvider, mode: Mode, db: ArchiveDB) {
       console.error(`  Network: ${lp.network.name}`);
       console.error(`  Daemon GraphQL (${lp.graphql.getEndpoint()}): ${status(results[0])}`);
       console.error(`  Archive-Node-API (${lp.archiveApi?.getEndpoint()}): ${status(results[1])}`);
+      if (provider instanceof LiveWriteProvider) {
+        console.error(
+          `  Wallets loaded (${provider.registry.wallets.length}): ` +
+            provider.registry.wallets.map((w) => w.alias).join(", ") +
+            (provider.registry.defaultAlias ? ` (default: ${provider.registry.defaultAlias})` : "")
+        );
+      }
     });
   } else {
     void db.isConnected().then((c) => console.error(`  Archive DB: ${c ? "connected" : "not reachable"}`));
   }
 }
 
+function warnWriteMode(network: NetworkName) {
+  console.error("");
+  console.error("================================================================");
+  console.error(" [WARN] LIVE WRITE MODE — EXPERIMENTAL");
+  console.error("");
+  console.error(" Wallet private keys are loaded UNENCRYPTED into this process's");
+  console.error(" memory from disk. This is suitable for ephemeral test wallets");
+  console.error(" on devnet/mesa, NOT for keys that hold meaningful value.");
+  console.error("");
+  console.error(" If you're pointing this at mainnet:");
+  console.error("   - Only load wallets you can afford to lose");
+  console.error("   - Or: don't. Use a hardware wallet for anything material.");
+  console.error("");
+  console.error(` Network in use: ${network}`);
+  console.error("================================================================");
+  console.error("");
+}
+
+async function buildLiveProvider(
+  network: NetworkConfigArg
+): Promise<LiveProvider | LiveWriteProvider> {
+  const cfg = resolveNetwork(network.name);
+  if (!network.walletsPath) return new LiveProvider(cfg);
+
+  // For mina-signer, "mainnet" requires the mainnet schema, everything else
+  // uses the testnet schema.
+  const signer = new MinaSigner({
+    network: network.name === "mainnet" ? "mainnet" : "testnet",
+  });
+
+  let registry: WalletRegistry;
+  try {
+    registry = await loadWallets(network.walletsPath, { signer });
+  } catch (e) {
+    if (e instanceof WalletLoadError) {
+      console.error(`Wallet load failed: ${e.message}`);
+      process.exit(1);
+    }
+    throw e;
+  }
+
+  warnWriteMode(network.name);
+  return new LiveWriteProvider(cfg, registry, signer);
+}
+
+interface NetworkConfigArg {
+  name: NetworkName;
+  walletsPath?: string;
+}
+
 async function main() {
-  const { mode, transport, httpPort, network } = parseArgs();
+  const { mode, transport, httpPort, network, wallets } = parseArgs();
 
   const db = new ArchiveDB();
   let provider: AnyProvider;
@@ -133,7 +216,7 @@ async function main() {
     const resetController = new ResetController();
     provider = new TutorialProvider(db, graphql, archiveApi, accountsManager, tracker, resetController);
   } else if (mode === "live") {
-    provider = new LiveProvider(resolveNetwork(network!));
+    provider = await buildLiveProvider({ name: network!, walletsPath: wallets });
   } else {
     provider = new SnapshotProvider(db);
   }
@@ -172,7 +255,8 @@ async function main() {
     const liveSuffix = () => {
       if (mode !== "live") return "";
       const cfg = (provider as LiveProvider).network;
-      const tag = cfg.stability === "preflight" ? `${network} [PREFLIGHT]` : `${network}`;
+      const writeTag = provider instanceof LiveWriteProvider ? " write-enabled" : "";
+      const tag = cfg.stability === "preflight" ? `${network} [PREFLIGHT]${writeTag}` : `${network}${writeTag}`;
       return ` (network: ${tag})`;
     };
     console.error(`Mina MCP server started in ${mode} mode (stdio)${liveSuffix()}`);
@@ -181,7 +265,8 @@ async function main() {
     const liveSuffix = () => {
       if (mode !== "live") return "";
       const cfg = (provider as LiveProvider).network;
-      const tag = cfg.stability === "preflight" ? `${network} [PREFLIGHT]` : `${network}`;
+      const writeTag = provider instanceof LiveWriteProvider ? " write-enabled" : "";
+      const tag = cfg.stability === "preflight" ? `${network} [PREFLIGHT]${writeTag}` : `${network}${writeTag}`;
       return ` (network: ${tag})`;
     };
     console.error(`Mina MCP server started in ${mode} mode (http) on :${httpServer.port}${liveSuffix()}`);

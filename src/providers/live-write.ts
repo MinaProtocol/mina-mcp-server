@@ -1,0 +1,243 @@
+import MinaSigner from "mina-signer";
+import { LiveProvider } from "./live.js";
+import { NetworkConfig } from "../networks.js";
+import { LoadedWallet, WalletRegistry } from "../wallets/types.js";
+import { QUERIES } from "../graphql/queries.js";
+
+// LiveProvider that holds plaintext private keys for one or more wallets
+// and can sign+submit payments / delegations against the configured public
+// daemon. Only constructed when the caller passes a wallets config (see
+// src/index.ts); plain LiveProvider stays the default read-only path.
+//
+// Private keys must never leave this class — not in tool responses, not in
+// log lines, not in error messages. See src/wallets/types.ts.
+
+export interface BuildPaymentInput {
+  to: string;
+  amount: string;
+  fee: string;
+  memo?: string;
+}
+
+export interface BuildDelegationInput {
+  to: string;
+  fee: string;
+  memo?: string;
+}
+
+export interface WalletSummary {
+  alias: string;
+  publicKey: string;
+  // Resolved at call time via daemon GraphQL. Optional because the lookup
+  // can fail (rate limit, transient blip) and we'd rather return a summary
+  // with a missing balance than throw away the whole list.
+  balance?: string | null;
+  nonce?: number | null;
+  balanceError?: string;
+}
+
+export class LiveWriteProvider extends LiveProvider {
+  public override readonly mode: string = "live";
+  public readonly registry: WalletRegistry;
+  private readonly signer: MinaSigner;
+  // Local nonce cache: max(daemon's view, last-submitted+1). Avoids races
+  // when an agent fires back-to-back sends before the daemon reflects the
+  // first one.
+  private readonly nonceCache = new Map<string, number>();
+
+  constructor(network: NetworkConfig, registry: WalletRegistry, signer: MinaSigner) {
+    super(network);
+    this.registry = registry;
+    this.signer = signer;
+  }
+
+  // Resolve a wallet by alias, public key, or fall back to default. Returns
+  // null with a descriptive message in `error` when nothing matches.
+  resolveWallet(opts: {
+    alias?: string;
+    publicKey?: string;
+  }): { wallet?: LoadedWallet; error?: string } {
+    if (opts.alias) {
+      const w = this.registry.wallets.find((w) => w.alias === opts.alias);
+      if (!w) {
+        return {
+          error: `Unknown wallet alias '${opts.alias}'. Known: ${this.registry.wallets
+            .map((w) => w.alias)
+            .join(", ")}.`,
+        };
+      }
+      if (opts.publicKey && opts.publicKey !== w.publicKey) {
+        return {
+          error: `Wallet '${opts.alias}' publicKey is ${w.publicKey}, but 'from' was ${opts.publicKey}.`,
+        };
+      }
+      return { wallet: w };
+    }
+    if (opts.publicKey) {
+      const w = this.registry.wallets.find((w) => w.publicKey === opts.publicKey);
+      if (!w) {
+        return {
+          error:
+            `No loaded wallet has publicKey '${opts.publicKey}'. ` +
+            `Known: ${this.registry.wallets.map((w) => w.publicKey).join(", ")}.`,
+        };
+      }
+      return { wallet: w };
+    }
+    if (this.registry.defaultAlias) {
+      const w = this.registry.wallets.find((w) => w.alias === this.registry.defaultAlias);
+      if (w) return { wallet: w };
+    }
+    return {
+      error:
+        `No wallet specified and no defaultWallet configured. Pass 'from_alias' or 'from', ` +
+        `or set 'defaultWallet' in wallets.json.`,
+    };
+  }
+
+  // List loaded wallets with current balance + nonce. Balances are fetched
+  // in parallel; a single failure surfaces as `balanceError` on that entry
+  // rather than tanking the whole list.
+  async listWallets(): Promise<WalletSummary[]> {
+    return Promise.all(
+      this.registry.wallets.map(async (w): Promise<WalletSummary> => {
+        try {
+          const account = await this.getAccountLive(w.publicKey);
+          const a = (account ?? {}) as { balance?: { total?: string }; nonce?: string };
+          return {
+            alias: w.alias,
+            publicKey: w.publicKey,
+            balance: a.balance?.total ?? null,
+            nonce: a.nonce !== undefined ? Number(a.nonce) : null,
+          };
+        } catch (e) {
+          return {
+            alias: w.alias,
+            publicKey: w.publicKey,
+            balanceError: (e as Error).message,
+          };
+        }
+      })
+    );
+  }
+
+  // Resolve the nonce to use for the next send from this wallet.
+  // max(local cache, daemon-reported) — handles archive lag where the
+  // daemon's view temporarily regresses.
+  async resolveNonce(wallet: LoadedWallet): Promise<number> {
+    let daemonNonce = 0;
+    try {
+      const account = await this.getAccountLive(wallet.publicKey);
+      const raw = (account as { nonce?: string } | null)?.nonce;
+      if (raw !== undefined && raw !== null) daemonNonce = Number(raw);
+    } catch {
+      // ignore — fall back to cache. The submission will fail with a clear
+      // error if the daemon really is unreachable.
+    }
+    const cached = this.nonceCache.get(wallet.publicKey) ?? -1;
+    return Math.max(daemonNonce, cached + 1);
+  }
+
+  // Build, sign, optionally submit. dryRun returns the signed payload + hash
+  // without hitting the daemon, useful for "show me what you'd do".
+  async sendSignedPayment(opts: {
+    wallet: LoadedWallet;
+    payment: BuildPaymentInput;
+    dryRun: boolean;
+  }): Promise<Record<string, unknown>> {
+    const nonce = await this.resolveNonce(opts.wallet);
+    const payload = {
+      from: opts.wallet.publicKey,
+      to: opts.payment.to,
+      amount: opts.payment.amount,
+      fee: opts.payment.fee,
+      nonce: String(nonce),
+      memo: opts.payment.memo ?? "",
+    };
+    const signed = this.signer.signPayment(payload, opts.wallet.privateKey);
+
+    if (opts.dryRun) {
+      return {
+        dryRun: true,
+        // Echo the signable data + the signature so the caller can inspect.
+        // signer.publicKey is the sender, not anything secret.
+        signedPayload: {
+          data: signed.data,
+          signature: signed.signature,
+          publicKey: signed.publicKey,
+        },
+      };
+    }
+
+    const input: Record<string, unknown> = {
+      from: opts.wallet.publicKey,
+      to: opts.payment.to,
+      amount: opts.payment.amount,
+      fee: opts.payment.fee,
+      nonce: String(nonce),
+      memo: opts.payment.memo ?? "",
+    };
+    if ((signed.data as { validUntil?: string }).validUntil) {
+      input.validUntil = (signed.data as { validUntil: string }).validUntil;
+    }
+    const result = (await this.graphql.query(QUERIES.sendPayment, {
+      input,
+      signature: signed.signature,
+    })) as { data?: { sendPayment?: unknown }; errors?: Array<{ message: string }> };
+    if (result.errors?.length) {
+      throw new Error(result.errors.map((e) => e.message).join("; "));
+    }
+    // Bump the cache *after* a successful submit so a failed submit doesn't
+    // burn a nonce. If the daemon ACKs, the next send must use nonce+1.
+    this.nonceCache.set(opts.wallet.publicKey, nonce);
+    return (result.data?.sendPayment ?? {}) as Record<string, unknown>;
+  }
+
+  async sendSignedDelegation(opts: {
+    wallet: LoadedWallet;
+    delegation: BuildDelegationInput;
+    dryRun: boolean;
+  }): Promise<Record<string, unknown>> {
+    const nonce = await this.resolveNonce(opts.wallet);
+    // mina-signer exposes signStakeDelegation with the same call shape.
+    const payload = {
+      from: opts.wallet.publicKey,
+      to: opts.delegation.to,
+      fee: opts.delegation.fee,
+      nonce: String(nonce),
+      memo: opts.delegation.memo ?? "",
+    };
+    const signed = this.signer.signStakeDelegation(payload, opts.wallet.privateKey);
+
+    if (opts.dryRun) {
+      return {
+        dryRun: true,
+        signedPayload: {
+          data: signed.data,
+          signature: signed.signature,
+          publicKey: signed.publicKey,
+        },
+      };
+    }
+
+    const input: Record<string, unknown> = {
+      from: opts.wallet.publicKey,
+      to: opts.delegation.to,
+      fee: opts.delegation.fee,
+      nonce: String(nonce),
+      memo: opts.delegation.memo ?? "",
+    };
+    if ((signed.data as { validUntil?: string }).validUntil) {
+      input.validUntil = (signed.data as { validUntil: string }).validUntil;
+    }
+    const result = (await this.graphql.query(QUERIES.sendDelegation, {
+      input,
+      signature: signed.signature,
+    })) as { data?: { sendDelegation?: unknown }; errors?: Array<{ message: string }> };
+    if (result.errors?.length) {
+      throw new Error(result.errors.map((e) => e.message).join("; "));
+    }
+    this.nonceCache.set(opts.wallet.publicKey, nonce);
+    return (result.data?.sendDelegation ?? {}) as Record<string, unknown>;
+  }
+}

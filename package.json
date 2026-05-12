@@ -23,6 +23,7 @@
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.12.1",
     "express": "^4.21.0",
+    "mina-signer": "3.0.7",
     "pg": "^8.13.1",
     "zod": "^3.24.2"
   },

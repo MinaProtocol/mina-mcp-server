@@ -97,6 +97,9 @@ export class TutorialProvider extends SnapshotProvider {
     fee: string;
     memo?: string;
   }) {
+    // signature: null tells the daemon to sign with its own wallet keys.
+    // The mutation declares $signature so an *explicit* null is required —
+    // omitting the variable triggers "Missing variable `signature`".
     const result = await this.graphql.query(QUERIES.sendPayment, {
       input: {
         from: input.from,
@@ -105,6 +108,7 @@ export class TutorialProvider extends SnapshotProvider {
         fee: input.fee,
         memo: input.memo ?? "",
       },
+      signature: null,
     });
     if (result.errors) throw new Error(result.errors[0].message);
     return (result.data as Record<string, unknown>)?.sendPayment ?? null;
@@ -118,6 +122,7 @@ export class TutorialProvider extends SnapshotProvider {
         fee: input.fee,
         memo: input.memo ?? "",
       },
+      signature: null,
     });
     if (result.errors) throw new Error(result.errors[0].message);
     return (result.data as Record<string, unknown>)?.sendDelegation ?? null;

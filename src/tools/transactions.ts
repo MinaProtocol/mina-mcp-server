@@ -2,6 +2,7 @@ import { z } from "zod";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { AnyProvider, Mode } from "../server-factory.js";
 import { TutorialProvider } from "../providers/tutorial.js";
+import { LiveWriteProvider } from "../providers/live-write.js";
 
 export function registerTransactionTools(
   server: McpServer,
@@ -42,26 +43,69 @@ export function registerTransactionTools(
     );
   }
 
-  if (mode === "tutorial") {
+  // send_payment / send_delegation register when *either*:
+  //   - mode is "tutorial" (daemon holds keys and signs server-side), OR
+  //   - mode is "live" AND a LiveWriteProvider was constructed (we hold
+  //     plaintext keys and sign client-side via mina-signer).
+  // In live mode without wallets the tools are not registered at all.
+  const isLiveWrite = mode === "live" && getProvider() instanceof LiveWriteProvider;
+
+  if (mode === "tutorial" || isLiveWrite) {
     server.tool(
       "send_payment",
-      "[business] Send a MINA payment between accounts (tutorial mode only). Uses the daemon's wallet to sign.",
+      isLiveWrite
+        ? "[business] Send a MINA payment from a loaded wallet (live-write mode). Signs client-side with mina-signer and submits via the daemon. Use `list_wallets` to see configured aliases. Pass `dry_run: true` to inspect the signed payload without submitting."
+        : "[business] Send a MINA payment between accounts (tutorial mode). Uses the daemon's wallet to sign.",
       {
-        from: z.string().describe("Sender public key (must be tracked by daemon)"),
+        from: z.string().optional().describe("Sender public key. In tutorial mode this must be a daemon-tracked key; in live-write mode it's resolved against the loaded wallets. Either this or from_alias is required (unless a defaultWallet is configured)."),
+        from_alias: z.string().optional().describe("[live-write] Wallet alias from wallets.json (e.g. 'warm', 'demo'). Mutually exclusive with passing a different `from`."),
         to: z.string().describe("Receiver public key"),
         amount: z.string().describe("Amount in nanomina (1 MINA = 1000000000 nanomina)"),
         fee: z.string().default("100000000").describe("Fee in nanomina (default: 0.1 MINA)"),
         memo: z.string().optional().describe("Transaction memo"),
+        dry_run: z.boolean().default(false).describe("[live-write] If true, returns the signed payload without submitting."),
       },
       async (args) => {
         const provider = getProvider();
+        // Live-write path: client-signed.
+        if (provider instanceof LiveWriteProvider) {
+          const { wallet, error } = provider.resolveWallet({
+            alias: args.from_alias,
+            publicKey: args.from,
+          });
+          if (!wallet) {
+            return { content: [{ type: "text", text: error ?? "Could not resolve wallet." }] };
+          }
+          try {
+            const result = await provider.sendSignedPayment({
+              wallet,
+              payment: { to: args.to, amount: args.amount, fee: args.fee, memo: args.memo },
+              dryRun: args.dry_run,
+            });
+            return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
+          } catch (e) {
+            return {
+              content: [{ type: "text", text: `Payment failed: ${(e as Error).message}` }],
+            };
+          }
+        }
+        // Tutorial path: daemon-signed.
         if (!(provider instanceof TutorialProvider)) {
           return {
-            content: [{ type: "text", text: "This tool is only available in tutorial mode." }],
+            content: [{ type: "text", text: "This tool is only available in tutorial mode or live-write mode." }],
           };
         }
+        if (!args.from) {
+          return { content: [{ type: "text", text: "tutorial mode: 'from' is required." }] };
+        }
         try {
-          const result = await provider.sendPayment(args);
+          const result = await provider.sendPayment({
+            from: args.from,
+            to: args.to,
+            amount: args.amount,
+            fee: args.fee,
+            memo: args.memo,
+          });
           return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
         } catch (e) {
           return {
@@ -73,22 +117,55 @@ export function registerTransactionTools(
 
     server.tool(
       "send_delegation",
-      "[business] Delegate stake to a block producer (tutorial mode only).",
+      isLiveWrite
+        ? "[business] Delegate stake from a loaded wallet to a block producer (live-write mode). Signs client-side, submits via the daemon. Pass `dry_run: true` to inspect without submitting."
+        : "[business] Delegate stake to a block producer (tutorial mode).",
       {
-        from: z.string().describe("Delegator public key (must be tracked by daemon)"),
+        from: z.string().optional().describe("Delegator public key (tutorial: must be daemon-tracked; live-write: resolved against loaded wallets)."),
+        from_alias: z.string().optional().describe("[live-write] Wallet alias from wallets.json."),
         to: z.string().describe("Block producer public key to delegate to"),
         fee: z.string().default("100000000").describe("Fee in nanomina (default: 0.1 MINA)"),
         memo: z.string().optional().describe("Transaction memo"),
+        dry_run: z.boolean().default(false).describe("[live-write] If true, returns the signed payload without submitting."),
       },
       async (args) => {
         const provider = getProvider();
+        if (provider instanceof LiveWriteProvider) {
+          const { wallet, error } = provider.resolveWallet({
+            alias: args.from_alias,
+            publicKey: args.from,
+          });
+          if (!wallet) {
+            return { content: [{ type: "text", text: error ?? "Could not resolve wallet." }] };
+          }
+          try {
+            const result = await provider.sendSignedDelegation({
+              wallet,
+              delegation: { to: args.to, fee: args.fee, memo: args.memo },
+              dryRun: args.dry_run,
+            });
+            return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
+          } catch (e) {
+            return {
+              content: [{ type: "text", text: `Delegation failed: ${(e as Error).message}` }],
+            };
+          }
+        }
         if (!(provider instanceof TutorialProvider)) {
           return {
-            content: [{ type: "text", text: "This tool is only available in tutorial mode." }],
+            content: [{ type: "text", text: "This tool is only available in tutorial mode or live-write mode." }],
           };
         }
+        if (!args.from) {
+          return { content: [{ type: "text", text: "tutorial mode: 'from' is required." }] };
+        }
         try {
-          const result = await provider.sendDelegation(args);
+          const result = await provider.sendDelegation({
+            from: args.from,
+            to: args.to,
+            fee: args.fee,
+            memo: args.memo,
+          });
           return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
         } catch (e) {
           return {
