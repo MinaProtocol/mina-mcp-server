@@ -132,8 +132,14 @@ export const QUERIES = {
     }
   }`,
 
-  sendPayment: `mutation SendPayment($input: SendPaymentInput!) {
-    sendPayment(input: $input) {
+  // Both mutations accept an optional $signature. When null, the daemon
+  // signs with its own keys (tutorial-mode lightnet). When set, the daemon
+  // verifies the provided signature and submits — required path for live
+  // mode against public daemons that don't hold user keys. JSON.stringify
+  // drops `undefined` from variables, so callers that don't pass a
+  // signature still see the daemon-signed path.
+  sendPayment: `mutation SendPayment($input: SendPaymentInput!, $signature: SignatureInput) {
+    sendPayment(input: $input, signature: $signature) {
       payment {
         id hash kind nonce
         source { publicKey }
@@ -143,8 +149,8 @@ export const QUERIES = {
     }
   }`,
 
-  sendDelegation: `mutation SendDelegation($input: SendDelegationInput!) {
-    sendDelegation(input: $input) {
+  sendDelegation: `mutation SendDelegation($input: SendDelegationInput!, $signature: SignatureInput) {
+    sendDelegation(input: $input, signature: $signature) {
       delegation {
         id hash kind nonce
         source { publicKey }

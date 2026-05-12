@@ -2,6 +2,7 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { AnyProvider, Mode } from "../server-factory.js";
 import { TutorialProvider } from "../providers/tutorial.js";
 import { LiveProvider } from "../providers/live.js";
+import { LiveWriteProvider } from "../providers/live-write.js";
 import { NetworkConfig } from "../networks.js";
 import { STDIO_SESSION_ID } from "../session/tracker.js";
 
@@ -77,8 +78,26 @@ interface LiveSnapshot {
     error?: string;
   };
   mempool: { size?: number; error?: string };
+  // Only present in live-write mode. Public keys + aliases only — private
+  // keys never appear here. balanceError is set when get_account threw for
+  // that wallet (rate limit, transient blip).
+  wallets?: Array<{
+    alias: string;
+    publicKey: string;
+    balance?: string | null;
+    nonce?: number | null;
+    balanceError?: string;
+    isDefault?: boolean;
+  }>;
   hints: string[];
 }
+
+const WRITE_MODE_HINTS = [
+  "Live-WRITE mode: send_payment and send_delegation are available and will sign client-side with mina-signer.",
+  "Use `list_wallets` (or this state's `wallets` field) to see which aliases are configured.",
+  "Pass `from_alias` to send_payment / send_delegation, or rely on the default wallet if one is set.",
+  "Try `send_payment` with `dry_run: true` first to see the signed payload without submitting.",
+];
 
 export function registerStateTools(
   server: McpServer,
@@ -108,6 +127,7 @@ export function registerStateTools(
 
       if (provider instanceof LiveProvider) {
         const isPreflight = provider.network.stability === "preflight";
+        const isWrite = provider instanceof LiveWriteProvider;
         const faucet = faucetHint(provider.network);
         const rosetta = rosettaHint(provider.network);
         const snapshot: LiveSnapshot = {
@@ -120,11 +140,12 @@ export function registerStateTools(
           },
           chain: {},
           mempool: {},
-          // Order: preflight warning first (loudest signal), generic live
-          // hints, then per-network pointers (faucet, then Rosetta) if we
-          // have them.
+          // Order: preflight warning first (loudest signal), write-mode
+          // hints next so an LLM picks up that send_payment is available,
+          // then generic live hints, then per-network pointers.
           hints: [
             ...(isPreflight ? [PREFLIGHT_HINT] : []),
+            ...(isWrite ? WRITE_MODE_HINTS : []),
             ...LIVE_HINTS,
             ...(faucet ? [faucet] : []),
             ...(rosetta ? [rosetta] : []),
@@ -142,6 +163,13 @@ export function registerStateTools(
           snapshot.mempool.size = Array.isArray(mempoolResult.value) ? mempoolResult.value.length : 0;
         } else {
           snapshot.mempool.error = (mempoolResult.reason as Error)?.message ?? "unknown";
+        }
+        if (provider instanceof LiveWriteProvider) {
+          const walletSummaries = await provider.listWallets();
+          snapshot.wallets = walletSummaries.map((w) => ({
+            ...w,
+            isDefault: provider.registry.defaultAlias === w.alias ? true : undefined,
+          }));
         }
         return { content: [{ type: "text", text: JSON.stringify(snapshot, null, 2) }] };
       }

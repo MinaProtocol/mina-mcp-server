@@ -115,6 +115,59 @@ Each network also carries optional pointers that the MCP server doesn't proxy it
 | `mainnet` | _(none — exchanges only)_ | https://mainnet-rosetta.gcp.o1test.net |
 | `mesa` | https://faucet.minaprotocol.com | https://rosetta.mina-mesa-network.gcp.o1test.net |
 
+### Live write mode (experimental — client-side signing)
+
+Live mode can be promoted from read-only to read+write by handing the server one or more wallet keys. Sends are signed **in this process** with [`mina-signer`](https://www.npmjs.com/package/mina-signer) and submitted as pre-signed transactions to the daemon. No daemon-side wallet, no faucet on devnet/mainnet, no key material on the wire.
+
+```bash
+npm start -- --mode live --network devnet --wallets ./wallets.json
+# equivalently:
+MINA_MCP_MODE=live MINA_MCP_NETWORK=devnet MINA_MCP_WALLETS=./wallets.json npm start
+```
+
+> **EXPERIMENTAL — read this before pointing it at real value.**
+> Wallet private keys are loaded **unencrypted** from disk into this process's memory. That's fine for ephemeral test wallets on devnet/mesa; it's **not** fine for production keys. Either:
+> - only load wallets containing money you can afford to lose, **or**
+> - don't use this mode for mainnet at all — use a hardware wallet or an offline signer for anything material.
+>
+> Pointing this at mainnet additionally requires `--allow-mainnet-writes` (or `MINA_MCP_ALLOW_MAINNET_WRITES=1`) as a deliberate speedbump against config typos.
+
+**`wallets.json` schema**
+
+```json
+{
+  "wallets": {
+    "warm": { "keyPath": "/home/me/.mina/keys/warm.key", "publicKey": "B62q…" },
+    "demo": { "keyPath": "/home/me/.mina/keys/demo.key", "publicKey": "B62q…" }
+  },
+  "defaultWallet": "warm"
+}
+```
+
+- `keyPath` files must contain exactly one `EK…` base58check private key (one line, no other content). Encrypted JSON key files are not supported in this revision.
+- `keyPath` files **must** be `chmod 600`; the loader refuses to start otherwise.
+- `publicKey` is verified at startup against the loaded key — catches "wrong key for this alias" mistakes before any tool runs.
+- `defaultWallet` is optional; if omitted, every `send_payment`/`send_delegation` call must pass `from_alias` or `from`.
+- Paths may be relative to the config file's directory (so the whole bundle is portable).
+
+**Tool surface added in live-write mode** (on top of the live-mode read tools):
+
+| Tool | Description |
+|---|---|
+| `list_wallets` | Loaded aliases + publicKeys + balances + nonces. **Never returns private keys.** |
+| `send_payment` | Sign + submit a MINA payment. Use `from_alias`, or `from` (publicKey), or rely on the default. Pass `dry_run: true` to inspect the signed payload without submitting. |
+| `send_delegation` | Same shape, for stake delegation. |
+
+`describe_state` in live-write mode adds a `wallets[]` block (aliases, publicKeys, balances — never keys) and prepends a `Live-WRITE mode…` hint, so an LLM picks up the new capabilities on the first orient.
+
+**Safety guarantees** (enforced, not just documented):
+
+- **Permission gate.** Any key file with mode wider than `0600` fails startup loudly.
+- **Mainnet writes opt-in.** `--allow-mainnet-writes` is a hard requirement for `--network mainnet --wallets …`.
+- **Nonce cache.** `max(daemon_nonce, last_submitted+1)` — survives archive-lag races without burning a nonce on failed submits.
+- **Dry-run.** `send_payment(dry_run: true)` returns the signed payload + computed hash without hitting the daemon.
+- **Automated redaction sweep.** `test/mcp/wallets-redaction.test.ts` fires every registered tool with bogus args and asserts the server's loaded private key never appears in any response.
+
 ### Snapshot mode against other public networks
 
 The `--profile download` path of `docker-compose.snapshot.yml` fetches dumps from the public bucket `https://storage.googleapis.com/mina-archive-dumps`. The URL layout is `<prefix>-<YYYY-MM-DD>_<HOUR>.sql.tar.gz`. To target a different network, override `ARCHIVE_DUMP_PREFIX`:
