@@ -1,0 +1,61 @@
+name: Live Smoke
+
+# Read-only smoke for live mode against the public Mina networks. Spawns
+# `node dist/index.js --mode live --network $NETWORK --transport http` on a
+# loopback port and drives JSON-RPC through it, then exercises a handful of
+# representative tools end-to-end (including the Rosetta Data API family).
+#
+# Catches:
+#   - daemon GraphQL / Archive-Node-API schema drift on the public endpoints
+#   - Rosetta endpoint or network_identifier changes
+#   - our own regressions on tool filtering / describe_state shape
+#
+# We do NOT host this — live mode runs locally next to the client. This
+# workflow just keeps an early-warning signal on the public surface.
+
+on:
+  schedule:
+    # 06:30 UTC daily. Offset from the deployed-smoke run (06:00) so the
+    # two notifications don't pile up if something goes broadly wrong.
+    - cron: "30 6 * * *"
+  workflow_dispatch:
+    inputs:
+      networks:
+        description: "Comma-separated network list (devnet,mainnet,mesa)"
+        required: false
+        default: "devnet,mainnet,mesa"
+
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    strategy:
+      fail-fast: false
+      matrix:
+        # mesa stays in the matrix per maintainer's call — it has ≥1 month
+        # of expected lifetime today. Drop it here when that changes.
+        network: [devnet, mainnet, mesa]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build
+        run: npm run build
+
+      - name: Smoke (${{ matrix.network }})
+        env:
+          NETWORK: ${{ matrix.network }}
+          # Stagger ports so retries / re-runs on the same runner don't
+          # collide (GH-hosted runners are fresh so this is mostly belt-
+          # and-braces).
+          PORT: 13900
+        run: ./scripts/smoke-live.sh
