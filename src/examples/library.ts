@@ -141,8 +141,8 @@ export const EXAMPLES: Example[] = [
   },
   {
     name: "browse_chain_archive",
-    summary: "List recent canonical blocks from the archive (works against any historical snapshot).",
-    mode: "both",
+    summary: "List recent canonical blocks from the archive (tutorial mode only — snapshot is schema-only).",
+    mode: "tutorial",
     steps: [
       { tool: "list_blocks", args: { limit: 10, status: "canonical" } },
     ],
@@ -150,7 +150,7 @@ export const EXAMPLES: Example[] = [
   {
     name: "look_up_account",
     summary: "Read an account's balance/nonce, then list its recent transactions.",
-    mode: "both",
+    mode: "tutorial",
     steps: [
       { tool: "get_account", args: { publicKey: "B62q..." }, note: "Replace publicKey with the account you care about." },
       { tool: "search_transactions", args: { publicKey: "B62q...", limit: 25 } },
