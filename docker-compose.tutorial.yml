@@ -42,7 +42,11 @@ services:
       - "${MINA_REST_PORT:-3085}:3085"       # Daemon GraphQL (direct)
       - "${NGINX_PORT:-8080}:8080"            # NGINX proxy (GraphQL + Explorer)
       - "${ACCOUNTS_MANAGER_PORT:-8181}:8181" # Accounts Manager
-      - "${ARCHIVE_API_PORT:-8282}:8282"      # Archive-Node-API GraphQL
+      # 8282 deliberately NOT exposed from the lightnet image: its bundled
+      # mina-archive-node-graphql is pinned to 0.0.9 (Dec 2025) which lacks
+      # the parentHash + per-block userCommands/zkappCommands/feeTransfer
+      # fields the SDK queries. The `archive-api` sidecar below runs the
+      # newer scoped publish against the same postgres and serves 8282.
       - "${POSTGRES_PORT:-5432}:5432"         # PostgreSQL
     healthcheck:
       test: ["CMD-SHELL", "curl -sf http://localhost:8080/graphql -H 'Content-Type: application/json' -d '{\"query\":\"{syncStatus}\"}' | grep -q SYNCED || exit 1"]
@@ -52,6 +56,27 @@ services:
       start_period: 60s
     volumes:
       - lightnet-data:/var/lib/postgresql/data
+
+  archive-api:
+    # Replaces the lightnet-bundled archive-node-api on port 8282 with the
+    # newer scoped publish that exposes Block.parentHash and the per-block
+    # userCommands/zkappCommands/feeTransfer fields the SDK queries.
+    # Reaches postgres over the compose default network; exposes 8282 to
+    # the host so callers keep pointing at http://localhost:8282.
+    image: node:20-alpine
+    depends_on:
+      mina-lightnet:
+        condition: service_healthy
+    environment:
+      PG_CONN: "postgres://postgres:postgres@mina-lightnet:5432/archive"
+      PORT: "8282"
+      ENABLE_INTROSPECTION: "true"
+    ports:
+      - "${ARCHIVE_API_PORT:-8282}:8282"
+    command:
+      - sh
+      - -c
+      - "npm install -g @o1-labs/mina-archive-node-graphql@0.0.6 && mina-archive-node-graphql"
 
 volumes:
   lightnet-data:
