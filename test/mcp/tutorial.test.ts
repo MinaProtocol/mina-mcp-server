@@ -228,12 +228,14 @@ describe("MCP Server - Tutorial Mode", () => {
     });
 
     it("get_network_state should return network state", async () => {
-      const mockState = { canonicalMaxBlockHeight: 100, pendingMaxBlockHeight: 101 };
-      (ctx.mockArchiveApi.getNetworkState as ReturnType<typeof vi.fn>).mockResolvedValueOnce(mockState);
+      const flat = { canonicalMaxBlockHeight: 100, pendingMaxBlockHeight: 101 };
+      (ctx.mockArchiveApi.getNetworkState as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
+        maxBlockHeight: flat,
+      });
 
       const result = await ctx.client.callTool({ name: "get_network_state", arguments: {} });
       const text = (result.content as Array<{ type: string; text: string }>)[0].text;
-      expect(JSON.parse(text)).toEqual(mockState);
+      expect(JSON.parse(text)).toEqual(flat);
     });
   });
 

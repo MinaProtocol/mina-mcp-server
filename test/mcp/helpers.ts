@@ -6,10 +6,10 @@ import { SnapshotProvider } from "../../src/providers/snapshot.js";
 import { TutorialProvider } from "../../src/providers/tutorial.js";
 import { LiveProvider } from "../../src/providers/live.js";
 import { resolveNetwork, NetworkName } from "../../src/networks.js";
-import { RosettaClient } from "../../src/rosetta/client.js";
+import { RosettaClient } from "@o1-labs/mina-rosetta-sdk";
 import { ArchiveDB } from "../../src/db/archive.js";
 import { GraphQLClient } from "../../src/graphql/client.js";
-import { ArchiveNodeAPI } from "../../src/graphql/archive-api.js";
+import { ArchiveClient } from "@o1-labs/mina-archive-sdk";
 import { AccountsManager } from "../../src/graphql/accounts-manager.js";
 import { SessionTracker } from "../../src/session/tracker.js";
 import { ResetController } from "../../src/reset/controller.js";
@@ -47,10 +47,11 @@ export function createMockArchiveApi() {
     getEvents: vi.fn().mockResolvedValue([]),
     getActions: vi.fn().mockResolvedValue([]),
     getBlocks: vi.fn().mockResolvedValue([]),
-    getNetworkState: vi.fn().mockResolvedValue({ canonicalMaxBlockHeight: 100, pendingMaxBlockHeight: 101 }),
-    isConnected: vi.fn().mockResolvedValue(true),
-    getEndpoint: vi.fn().mockReturnValue("http://localhost:8282"),
-  } as unknown as ArchiveNodeAPI;
+    getNetworkState: vi.fn().mockResolvedValue({
+      maxBlockHeight: { canonicalMaxBlockHeight: 100, pendingMaxBlockHeight: 101 },
+    }),
+    graphqlUri: "http://localhost:8282",
+  } as unknown as ArchiveClient;
 }
 
 export function createMockAccountsManager() {
@@ -112,7 +113,7 @@ export async function setupSnapshotMcp(): Promise<McpTestContext> {
 export interface TutorialMcpTestContext extends McpTestContext {
   provider: TutorialProvider;
   mockGraphQL: GraphQLClient;
-  mockArchiveApi: ArchiveNodeAPI;
+  mockArchiveApi: ArchiveClient;
   mockAccountsManager: AccountsManager;
   tracker: SessionTracker;
   resetController: ResetController;
@@ -123,7 +124,7 @@ export interface LiveMcpTestContext {
   server: McpServer;
   provider: LiveProvider;
   mockGraphQL: GraphQLClient;
-  mockArchiveApi: ArchiveNodeAPI;
+  mockArchiveApi: ArchiveClient;
   mockRosetta: RosettaClient;
   cleanup: () => Promise<void>;
 }
@@ -135,10 +136,11 @@ export function createMockRosetta(): RosettaClient {
     accountBalance: vi.fn().mockResolvedValue({}),
     block: vi.fn().mockResolvedValue({}),
     mempool: vi.fn().mockResolvedValue({ transaction_identifiers: [] }),
-    mempoolTransaction: vi.fn().mockResolvedValue({}),
-    isConnected: vi.fn().mockResolvedValue(true),
-    getEndpoint: vi.fn().mockReturnValue("https://rosetta.test"),
-    getNetworkIdentifier: vi.fn().mockReturnValue({ blockchain: "mina", network: "devnet" }),
+    // rosetta_mempool_transaction goes through the SDK's public post()
+    // since the SDK doesn't (yet) wrap /mempool/transaction.
+    post: vi.fn().mockResolvedValue({}),
+    baseUrl: "https://rosetta.test",
+    network: { blockchain: "mina", network: "devnet" },
   } as unknown as RosettaClient;
 }
 
@@ -149,7 +151,7 @@ export async function setupLiveMcp(networkName: NetworkName = "devnet"): Promise
   const provider = new LiveProvider(resolveNetwork(networkName));
   // Swap in mocks so tests don't reach the public network.
   (provider as unknown as { graphql: GraphQLClient }).graphql = mockGraphQL;
-  (provider as unknown as { archiveApi: ArchiveNodeAPI }).archiveApi = mockArchiveApi;
+  (provider as unknown as { archiveApi: ArchiveClient }).archiveApi = mockArchiveApi;
   (provider as unknown as { rosetta: RosettaClient }).rosetta = mockRosetta;
 
   const server = new McpServer({ name: "mina-live-test", version: "0.1.0" });

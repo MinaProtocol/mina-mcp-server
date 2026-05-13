@@ -1,6 +1,6 @@
+import { ArchiveClient } from "@o1-labs/mina-archive-sdk";
 import { GraphQLClient } from "../graphql/client.js";
 import { QUERIES } from "../graphql/queries.js";
-import { ArchiveNodeAPI } from "../graphql/archive-api.js";
 import { AccountsManager } from "../graphql/accounts-manager.js";
 import { SessionTracker } from "../session/tracker.js";
 import { ResetController } from "../reset/controller.js";
@@ -9,7 +9,7 @@ import { ArchiveDB } from "../db/archive.js";
 
 export class TutorialProvider extends SnapshotProvider {
   public graphql: GraphQLClient;
-  public archiveApi: ArchiveNodeAPI | null;
+  public archiveApi: ArchiveClient | null;
   public accountsManager: AccountsManager | null;
   public tracker: SessionTracker | null;
   public resetController: ResetController | null;
@@ -18,7 +18,7 @@ export class TutorialProvider extends SnapshotProvider {
   constructor(
     db: ArchiveDB,
     graphql: GraphQLClient,
-    archiveApi?: ArchiveNodeAPI,
+    archiveApi?: ArchiveClient,
     accountsManager?: AccountsManager,
     tracker?: SessionTracker,
     resetController?: ResetController

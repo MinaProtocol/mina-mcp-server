@@ -8,8 +8,8 @@ import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { LiveWriteProvider } from "../../src/providers/live-write.js";
 import { GraphQLClient } from "../../src/graphql/client.js";
-import { ArchiveNodeAPI } from "../../src/graphql/archive-api.js";
-import { RosettaClient } from "../../src/rosetta/client.js";
+import { ArchiveClient } from "@o1-labs/mina-archive-sdk";
+import { RosettaClient } from "@o1-labs/mina-rosetta-sdk";
 import { resolveNetwork } from "../../src/networks.js";
 import { loadWallets } from "../../src/wallets/loader.js";
 import { registerAccountTools } from "../../src/tools/accounts.js";
@@ -70,7 +70,7 @@ async function setupLiveWriteCtx(): Promise<Ctx> {
   // Swap upstream clients for mocks so we never touch the real network.
   const mockGraphQL = createMockGraphQL();
   (provider as unknown as { graphql: GraphQLClient }).graphql = mockGraphQL;
-  (provider as unknown as { archiveApi: ArchiveNodeAPI }).archiveApi = createMockArchiveApi();
+  (provider as unknown as { archiveApi: ArchiveClient }).archiveApi = createMockArchiveApi();
   (provider as unknown as { rosetta: RosettaClient }).rosetta = createMockRosetta();
 
   const server = new McpServer({ name: "mina-live-write-test", version: "0.1.0" });

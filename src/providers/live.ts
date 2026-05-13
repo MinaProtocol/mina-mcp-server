@@ -1,9 +1,9 @@
+import { ArchiveClient } from "@o1-labs/mina-archive-sdk";
 import { GraphQLClient } from "../graphql/client.js";
-import { ArchiveNodeAPI } from "../graphql/archive-api.js";
 import { ArchiveDB } from "../db/archive.js";
 import { TutorialProvider } from "./tutorial.js";
 import { NetworkConfig, preflightWarning } from "../networks.js";
-import { RosettaClient } from "../rosetta/client.js";
+import { RosettaClient } from "@o1-labs/mina-rosetta-sdk";
 
 /**
  * Read-only provider that points at a public Mina network (devnet, mainnet, mesa)
@@ -25,14 +25,14 @@ export class LiveProvider extends TutorialProvider {
     // loud failure if anything bypasses the registration filter.
     const stubDb = new StubArchiveDB();
     const graphql = new GraphQLClient(network.daemonGraphql);
-    const archiveApi = new ArchiveNodeAPI(network.archiveNodeApi);
+    const archiveApi = new ArchiveClient(network.archiveNodeApi);
     super(stubDb as unknown as ArchiveDB, graphql, archiveApi);
     this.network = network;
     this.rosetta =
       network.rosettaUrl && network.rosettaNetwork
-        ? new RosettaClient(network.rosettaUrl, {
-            blockchain: "mina",
-            network: network.rosettaNetwork,
+        ? new RosettaClient({
+            baseUrl: network.rosettaUrl,
+            network: { blockchain: "mina", network: network.rosettaNetwork },
           })
         : null;
     const warning = preflightWarning(network);

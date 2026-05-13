@@ -11,7 +11,7 @@
 
 import { describe, it, expect, beforeAll } from "vitest";
 import { GraphQLClient } from "../../src/graphql/client.js";
-import { ArchiveNodeAPI } from "../../src/graphql/archive-api.js";
+import { ArchiveClient } from "@o1-labs/mina-archive-sdk";
 import { AccountsManager, type TestAccount } from "../../src/graphql/accounts-manager.js";
 import { ArchiveDB } from "../../src/db/archive.js";
 
@@ -21,13 +21,13 @@ const ACCOUNTS_MANAGER_ENDPOINT = process.env.ACCOUNTS_MANAGER_ENDPOINT ?? "http
 
 describe("Lightnet Integration", () => {
   let graphql: GraphQLClient;
-  let archiveApi: ArchiveNodeAPI;
+  let archiveApi: ArchiveClient;
   let accountsMgr: AccountsManager;
   let db: ArchiveDB;
 
   beforeAll(() => {
     graphql = new GraphQLClient(DAEMON_ENDPOINT);
-    archiveApi = new ArchiveNodeAPI(ARCHIVE_API_ENDPOINT);
+    archiveApi = new ArchiveClient(ARCHIVE_API_ENDPOINT);
     accountsMgr = new AccountsManager(ACCOUNTS_MANAGER_ENDPOINT);
     db = new ArchiveDB();
   });
@@ -43,7 +43,8 @@ describe("Lightnet Integration", () => {
     });
 
     it("Archive-Node-API should be reachable", async () => {
-      expect(await archiveApi.isConnected()).toBe(true);
+      // Reachability via SDK = a successful network-state probe.
+      await expect(archiveApi.getNetworkState()).resolves.toBeDefined();
     });
 
     it("Accounts Manager should be reachable", async () => {
@@ -216,8 +217,8 @@ describe("Lightnet Integration", () => {
   describe("Archive-Node-API", () => {
     it("should return network state with block heights", async () => {
       const state = await archiveApi.getNetworkState();
-      expect(state.canonicalMaxBlockHeight).toBeGreaterThanOrEqual(0);
-      expect(state.pendingMaxBlockHeight).toBeGreaterThanOrEqual(0);
+      expect(state.maxBlockHeight?.canonicalMaxBlockHeight ?? -1).toBeGreaterThanOrEqual(0);
+      expect(state.maxBlockHeight?.pendingMaxBlockHeight ?? -1).toBeGreaterThanOrEqual(0);
     });
 
     it("should return blocks", async () => {
@@ -232,7 +233,7 @@ describe("Lightnet Integration", () => {
 
     it("should return canonical blocks", async () => {
       const blocks = await archiveApi.getBlocks({
-        canonical: true,
+        query: { canonical: true },
         sortBy: "BLOCKHEIGHT_DESC",
         limit: 3,
       });

@@ -74,7 +74,12 @@ export function registerZkAppTools(
         return { content: [{ type: "text", text: "This tool requires Archive-Node-API." }] };
       }
       try {
-        const blocks = await provider.archiveApi.getBlocks(args);
+        const { canonical, sortBy, limit } = args;
+        const blocks = await provider.archiveApi.getBlocks({
+          query: canonical !== undefined ? { canonical } : undefined,
+          sortBy,
+          limit,
+        });
         return { content: [{ type: "text", text: JSON.stringify(blocks, null, 2) }] };
       } catch (e) {
         return { content: [{ type: "text", text: `Error: ${(e as Error).message}` }] };
@@ -93,7 +98,11 @@ export function registerZkAppTools(
       }
       try {
         const state = await provider.archiveApi.getNetworkState();
-        return { content: [{ type: "text", text: JSON.stringify(state, null, 2) }] };
+        const flat = state.maxBlockHeight ?? {
+          canonicalMaxBlockHeight: 0,
+          pendingMaxBlockHeight: 0,
+        };
+        return { content: [{ type: "text", text: JSON.stringify(flat, null, 2) }] };
       } catch (e) {
         return { content: [{ type: "text", text: `Error: ${(e as Error).message}` }] };
       }

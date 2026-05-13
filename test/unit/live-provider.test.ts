@@ -8,7 +8,7 @@ describe("LiveProvider", () => {
     expect(provider.mode).toBe("live");
     expect(provider.network.name).toBe("devnet");
     expect(provider.graphql.getEndpoint()).toBe(resolveNetwork("devnet").daemonGraphql);
-    expect(provider.archiveApi?.getEndpoint()).toBe(resolveNetwork("devnet").archiveNodeApi);
+    expect(provider.archiveApi?.graphqlUri).toBe(resolveNetwork("devnet").archiveNodeApi);
   });
 
   it("DB stub throws when archive DB is queried (DB-backed tools must not run in live mode)", async () => {
