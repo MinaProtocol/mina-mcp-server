@@ -9,7 +9,7 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { LiveWriteProvider } from "../../src/providers/live-write.js";
 import { GraphQLClient } from "../../src/graphql/client.js";
 import { ArchiveClient } from "@o1-labs/mina-archive-sdk";
-import { RosettaClient } from "../../src/rosetta/client.js";
+import { RosettaClient } from "@o1-labs/mina-rosetta-sdk";
 import { resolveNetwork } from "../../src/networks.js";
 import { loadWallets } from "../../src/wallets/loader.js";
 import { registerAccountTools } from "../../src/tools/accounts.js";

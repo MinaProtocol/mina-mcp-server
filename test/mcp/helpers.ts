@@ -6,7 +6,7 @@ import { SnapshotProvider } from "../../src/providers/snapshot.js";
 import { TutorialProvider } from "../../src/providers/tutorial.js";
 import { LiveProvider } from "../../src/providers/live.js";
 import { resolveNetwork, NetworkName } from "../../src/networks.js";
-import { RosettaClient } from "../../src/rosetta/client.js";
+import { RosettaClient } from "@o1-labs/mina-rosetta-sdk";
 import { ArchiveDB } from "../../src/db/archive.js";
 import { GraphQLClient } from "../../src/graphql/client.js";
 import { ArchiveClient } from "@o1-labs/mina-archive-sdk";
@@ -136,10 +136,11 @@ export function createMockRosetta(): RosettaClient {
     accountBalance: vi.fn().mockResolvedValue({}),
     block: vi.fn().mockResolvedValue({}),
     mempool: vi.fn().mockResolvedValue({ transaction_identifiers: [] }),
-    mempoolTransaction: vi.fn().mockResolvedValue({}),
-    isConnected: vi.fn().mockResolvedValue(true),
-    getEndpoint: vi.fn().mockReturnValue("https://rosetta.test"),
-    getNetworkIdentifier: vi.fn().mockReturnValue({ blockchain: "mina", network: "devnet" }),
+    // rosetta_mempool_transaction goes through the SDK's public post()
+    // since the SDK doesn't (yet) wrap /mempool/transaction.
+    post: vi.fn().mockResolvedValue({}),
+    baseUrl: "https://rosetta.test",
+    network: { blockchain: "mina", network: "devnet" },
   } as unknown as RosettaClient;
 }
 

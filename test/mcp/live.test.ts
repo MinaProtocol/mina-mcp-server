@@ -176,13 +176,19 @@ describe("MCP Server - Live Mode", () => {
     it("rosetta_account omits block_identifier when none is provided", async () => {
       (ctx.mockRosetta.accountBalance as ReturnType<typeof vi.fn>).mockResolvedValueOnce({ balances: [] });
       await ctx.client.callTool({ name: "rosetta_account", arguments: { address: "B62qtest" } });
-      expect(ctx.mockRosetta.accountBalance).toHaveBeenCalledWith("B62qtest", undefined);
+      expect(ctx.mockRosetta.accountBalance).toHaveBeenCalledWith({
+        address: "B62qtest",
+        blockIdentifier: undefined,
+      });
     });
 
     it("rosetta_account passes a {index} block_identifier when blockIndex is set", async () => {
       (ctx.mockRosetta.accountBalance as ReturnType<typeof vi.fn>).mockResolvedValueOnce({ balances: [] });
       await ctx.client.callTool({ name: "rosetta_account", arguments: { address: "B62qtest", blockIndex: 42 } });
-      expect(ctx.mockRosetta.accountBalance).toHaveBeenCalledWith("B62qtest", { index: 42 });
+      expect(ctx.mockRosetta.accountBalance).toHaveBeenCalledWith({
+        address: "B62qtest",
+        blockIdentifier: { index: 42 },
+      });
     });
 
     it("rosetta tool errors surface the safeCall label prefix", async () => {

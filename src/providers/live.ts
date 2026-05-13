@@ -3,7 +3,7 @@ import { GraphQLClient } from "../graphql/client.js";
 import { ArchiveDB } from "../db/archive.js";
 import { TutorialProvider } from "./tutorial.js";
 import { NetworkConfig, preflightWarning } from "../networks.js";
-import { RosettaClient } from "../rosetta/client.js";
+import { RosettaClient } from "@o1-labs/mina-rosetta-sdk";
 
 /**
  * Read-only provider that points at a public Mina network (devnet, mainnet, mesa)
@@ -30,9 +30,9 @@ export class LiveProvider extends TutorialProvider {
     this.network = network;
     this.rosetta =
       network.rosettaUrl && network.rosettaNetwork
-        ? new RosettaClient(network.rosettaUrl, {
-            blockchain: "mina",
-            network: network.rosettaNetwork,
+        ? new RosettaClient({
+            baseUrl: network.rosettaUrl,
+            network: { blockchain: "mina", network: network.rosettaNetwork },
           })
         : null;
     const warning = preflightWarning(network);
