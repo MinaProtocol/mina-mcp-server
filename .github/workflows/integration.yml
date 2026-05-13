@@ -25,11 +25,7 @@ jobs:
           - 3085:3085
           - 8080:8080
           - 8181:8181
-          # 8282 deliberately NOT exposed: the bundled mina-archive-node-graphql
-          # inside the lightnet image is pinned to 0.0.9 (Dec 2025) and lacks
-          # the parentHash + per-block userCommands/zkappCommands/feeTransfer
-          # fields that the SDK queries. We replace it with the newer scoped
-          # publish below, pointed at the same postgres.
+          - 8282:8282
           - 5432:5432
 
     steps:
@@ -53,17 +49,6 @@ jobs:
           mina-graphql-port: "8080"
           max-attempts: "60"
           polling-interval-ms: "10000"
-
-      - name: Start scoped @o1-labs/mina-archive-node-graphql against lightnet postgres
-        run: |
-          npm install -g @o1-labs/mina-archive-node-graphql@0.0.6
-          # Background-launch and capture logs for post-mortem. Wait-loop below
-          # blocks until the new server's networkState resolver succeeds.
-          PG_CONN='postgres://postgres:postgres@localhost:5432/archive' \
-            PORT=8282 \
-            ENABLE_INTROSPECTION=true \
-            nohup mina-archive-node-graphql > /tmp/archive-node-api.log 2>&1 &
-          echo "ARCHIVE_API_PID=$!" >> "$GITHUB_ENV"
 
       - name: Wait for Archive-Node-API
         run: |
