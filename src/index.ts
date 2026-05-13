@@ -4,7 +4,7 @@ import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js"
 import MinaSigner from "mina-signer";
 import { ArchiveDB } from "./db/archive.js";
 import { GraphQLClient } from "./graphql/client.js";
-import { ArchiveNodeAPI } from "./graphql/archive-api.js";
+import { ArchiveClient } from "@o1-labs/mina-archive-sdk";
 import { AccountsManager } from "./graphql/accounts-manager.js";
 import { SessionTracker } from "./session/tracker.js";
 import { ResetController } from "./reset/controller.js";
@@ -112,19 +112,29 @@ function parseArgs(): ParsedArgs {
   return { mode, transport, httpPort, network, wallets, allowMainnetWrites };
 }
 
+async function archiveReachable(client: ArchiveClient | null | undefined): Promise<boolean> {
+  if (!client) return false;
+  try {
+    await client.getNetworkState();
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 function logProviderHealth(provider: AnyProvider, mode: Mode, db: ArchiveDB) {
   if (mode === "tutorial") {
     const tp = provider as TutorialProvider;
     void Promise.allSettled([
       tp.graphql.isConnected(),
-      tp.archiveApi?.isConnected(),
+      archiveReachable(tp.archiveApi),
       tp.accountsManager?.isConnected(),
       db.isConnected(),
     ]).then((results) => {
       const status = (r: PromiseSettledResult<unknown>) =>
         r.status === "fulfilled" && r.value ? "connected" : "not reachable";
       console.error(`  Daemon GraphQL (${tp.graphql.getEndpoint()}): ${status(results[0])}`);
-      console.error(`  Archive-Node-API (${tp.archiveApi?.getEndpoint()}): ${status(results[1])}`);
+      console.error(`  Archive-Node-API (${tp.archiveApi?.graphqlUri}): ${status(results[1])}`);
       console.error(`  Accounts Manager (${tp.accountsManager?.getEndpoint()}): ${status(results[2])}`);
       console.error(`  Archive DB: ${status(results[3])}`);
     });
@@ -132,13 +142,13 @@ function logProviderHealth(provider: AnyProvider, mode: Mode, db: ArchiveDB) {
     const lp = provider as LiveProvider;
     void Promise.allSettled([
       lp.graphql.isConnected(),
-      lp.archiveApi?.isConnected(),
+      archiveReachable(lp.archiveApi),
     ]).then((results) => {
       const status = (r: PromiseSettledResult<unknown>) =>
         r.status === "fulfilled" && r.value ? "connected" : "not reachable";
       console.error(`  Network: ${lp.network.name}`);
       console.error(`  Daemon GraphQL (${lp.graphql.getEndpoint()}): ${status(results[0])}`);
-      console.error(`  Archive-Node-API (${lp.archiveApi?.getEndpoint()}): ${status(results[1])}`);
+      console.error(`  Archive-Node-API (${lp.archiveApi?.graphqlUri}): ${status(results[1])}`);
       if (provider instanceof LiveWriteProvider) {
         console.error(
           `  Wallets loaded (${provider.registry.wallets.length}): ` +
@@ -210,7 +220,9 @@ async function main() {
 
   if (mode === "tutorial") {
     const graphql = new GraphQLClient();
-    const archiveApi = new ArchiveNodeAPI();
+    const archiveApi = new ArchiveClient(
+      process.env.ARCHIVE_API_ENDPOINT ?? "http://localhost:8282"
+    );
     const accountsManager = new AccountsManager();
     const tracker = new SessionTracker(accountsManager);
     const resetController = new ResetController();

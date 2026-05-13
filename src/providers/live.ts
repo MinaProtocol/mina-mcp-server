@@ -1,5 +1,5 @@
+import { ArchiveClient } from "@o1-labs/mina-archive-sdk";
 import { GraphQLClient } from "../graphql/client.js";
-import { ArchiveNodeAPI } from "../graphql/archive-api.js";
 import { ArchiveDB } from "../db/archive.js";
 import { TutorialProvider } from "./tutorial.js";
 import { NetworkConfig, preflightWarning } from "../networks.js";
@@ -25,7 +25,7 @@ export class LiveProvider extends TutorialProvider {
     // loud failure if anything bypasses the registration filter.
     const stubDb = new StubArchiveDB();
     const graphql = new GraphQLClient(network.daemonGraphql);
-    const archiveApi = new ArchiveNodeAPI(network.archiveNodeApi);
+    const archiveApi = new ArchiveClient(network.archiveNodeApi);
     super(stubDb as unknown as ArchiveDB, graphql, archiveApi);
     this.network = network;
     this.rosetta =

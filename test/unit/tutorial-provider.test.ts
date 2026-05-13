@@ -2,14 +2,14 @@ import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { TutorialProvider } from "../../src/providers/tutorial.js";
 import { ArchiveDB } from "../../src/db/archive.js";
 import { GraphQLClient } from "../../src/graphql/client.js";
-import { ArchiveNodeAPI } from "../../src/graphql/archive-api.js";
+import { ArchiveClient } from "@o1-labs/mina-archive-sdk";
 import { AccountsManager } from "../../src/graphql/accounts-manager.js";
 
 describe("TutorialProvider", () => {
   let provider: TutorialProvider;
   let mockDb: ArchiveDB;
   let mockGraphql: GraphQLClient;
-  let mockArchiveApi: ArchiveNodeAPI;
+  let mockArchiveApi: ArchiveClient;
   let mockAccountsMgr: AccountsManager;
 
   beforeEach(() => {
@@ -31,9 +31,8 @@ describe("TutorialProvider", () => {
       getActions: vi.fn(),
       getBlocks: vi.fn(),
       getNetworkState: vi.fn(),
-      isConnected: vi.fn().mockResolvedValue(true),
-      getEndpoint: vi.fn().mockReturnValue("http://test:8282"),
-    } as unknown as ArchiveNodeAPI;
+      graphqlUri: "http://test:8282",
+    } as unknown as ArchiveClient;
 
     mockAccountsMgr = {
       acquireAccount: vi.fn(),
