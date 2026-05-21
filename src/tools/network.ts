@@ -50,7 +50,9 @@ export function registerNetworkTools(
   if (mode !== "snapshot") {
     server.tool(
       "get_genesis_constants",
-      "[business] Get genesis constants like coinbase reward and account creation fee.",
+      "Get the network's genesis constants: coinbase reward, account-creation fee, " +
+        "slot/epoch timing, k (confirmations), and ledger depth. Use these to reason " +
+        "about fees, finality, and timing rather than hard-coding values.",
       {},
       async () => {
         const provider = getProvider();
@@ -66,7 +68,9 @@ export function registerNetworkTools(
 
     server.tool(
       "get_network_id",
-      "[business] Get the network identifier.",
+      "Get the daemon's network identifier (e.g. 'mina:mainnet', 'mina:devnet'). " +
+        "Use this to confirm which network the server is actually talking to before " +
+        "interpreting balances or submitting transactions.",
       {},
       async () => {
         const provider = getProvider();

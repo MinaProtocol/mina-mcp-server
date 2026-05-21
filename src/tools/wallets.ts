@@ -18,7 +18,7 @@ export function registerWalletTools(
 
   server.tool(
     "list_wallets",
-    "[business] List wallets loaded for live-write mode: alias, publicKey, current balance, and nonce. Never returns private keys.",
+    "List wallets loaded for live-write mode: alias, publicKey, current balance, and nonce. Never returns private keys.",
     {},
     async () => {
       const summaries = await provider.listWallets();
