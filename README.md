@@ -2,7 +2,7 @@
 
 MCP (Model Context Protocol) server for the [Mina Protocol](https://minaprotocol.com/) blockchain. Exposes Mina blockchain data and operations through MCP-compatible tools that can be used by AI assistants and other MCP clients.
 
-> **Status: beta / preview.** This package is **not self-sufficient** — it is a thin MCP layer on top of backing services (PostgreSQL and, in tutorial mode, a running Mina lightnet). You must stand up the required infrastructure yourself *before* starting the MCP server. See [Prerequisites](#prerequisites) below for what each mode needs. A future release will ship a bundled SQLite snapshot for zero-infra use, and a hosted-endpoint live mode.
+> **Status: beta / preview.** **Live mode** talks to public Mina networks (devnet / mainnet / mesa) and needs **no local infrastructure** — run `npx @o1-labs/mina-mcp-server --mode live --network devnet`, or point your client at the [hosted sandbox](#deploying-on-flyio). **Snapshot** and **tutorial** modes are thin MCP layers over backing services (PostgreSQL, and for tutorial a local Mina lightnet) that you must stand up yourself first — see [Prerequisites](#prerequisites). A bundled SQLite snapshot for zero-infra *snapshot* mode is planned ([#28](https://github.com/MinaProtocol/mina-mcp-server/issues/28)).
 
 ## Features
 
@@ -432,10 +432,17 @@ The first session call returns a `Mcp-Session-Id` header that the client must ec
 
 ## Roadmap
 
-- **Bundled SQLite snapshot** — replace the Postgres requirement in snapshot mode with a SQLite file shipped inside the package, so `npx @o1-labs/mina-mcp-server --mode snapshot` runs with zero infra.
-- **Live mode** — connect to hosted public devnet / mainnet GraphQL + archive endpoints, so live chain queries work without any local setup.
-- **Tutorial mode** — will remain infrastructure-dependent (local lightnet), as it is intended for development against a controllable network.
+Tracked in [GitHub issues](https://github.com/MinaProtocol/mina-mcp-server/issues). Highlights:
+
+- **Bundled SQLite snapshot** ([#28](https://github.com/MinaProtocol/mina-mcp-server/issues/28)) — ship a SQLite archive snapshot inside the package so `npx @o1-labs/mina-mcp-server --mode snapshot` runs with zero infra, the same zero-setup story live mode already has.
+- **Rosetta Construction API** — the offline signing flow (derive → preprocess → metadata → payloads → sign → combine → submit). The read-only Rosetta Data API tools already ship today.
+
+Shipped recently: live mode against public networks (devnet / mainnet / mesa), a hosted [Fly.io sandbox](#deploying-on-flyio), live-write mode (in-process signing), and adoption of the published `@o1-labs/mina-*` SDKs as the transport layer. Tutorial mode stays infrastructure-dependent (local lightnet) by design — it's for development against a controllable network.
+
+## Contributing
+
+See [CONTRIBUTING.md](CONTRIBUTING.md) for dev setup, testing, and PR conventions. Found a vulnerability? See [SECURITY.md](SECURITY.md).
 
 ## License
 
-Apache-2.0
+[Apache-2.0](LICENSE)
