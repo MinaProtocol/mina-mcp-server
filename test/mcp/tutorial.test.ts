@@ -51,7 +51,8 @@ describe("MCP Server - Tutorial Mode", () => {
         data: { block: mockBlock },
       });
 
-      const result = await ctx.client.callTool({ name: "get_block", arguments: { stateHash: "3NKtest" } });
+      // detail:"full" returns the raw daemon block (default is the lite summary).
+      const result = await ctx.client.callTool({ name: "get_block", arguments: { stateHash: "3NKtest", detail: "full" } });
       const text = (result.content as Array<{ type: string; text: string }>)[0].text;
       expect(JSON.parse(text)).toEqual(mockBlock);
     });
@@ -62,7 +63,7 @@ describe("MCP Server - Tutorial Mode", () => {
         data: { bestChain: mockChain },
       });
 
-      const result = await ctx.client.callTool({ name: "get_best_chain", arguments: {} });
+      const result = await ctx.client.callTool({ name: "get_best_chain", arguments: { detail: "full" } });
       const text = (result.content as Array<{ type: string; text: string }>)[0].text;
       expect(JSON.parse(text)).toEqual(mockChain);
     });
