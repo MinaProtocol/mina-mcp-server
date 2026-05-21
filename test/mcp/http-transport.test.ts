@@ -108,3 +108,85 @@ describe("http transport", () => {
     expect(mockAccountsManager.releaseAccount).toHaveBeenCalledWith({ pk: "B62qhttp1", sk: "EKhttp1" });
   });
 });
+
+describe("http transport: limits + metrics", () => {
+  function makeProvider() {
+    return new TutorialProvider(
+      createMockDb(),
+      createMockGraphQL(),
+      createMockArchiveApi(),
+      createMockAccountsManager()
+    );
+  }
+
+  it("rate-limits /mcp per IP and records it in /metrics", async () => {
+    const server = await startHttpServer({
+      port: 0,
+      provider: makeProvider(),
+      mode: "tutorial",
+      rateLimitPerMinute: 2,
+    });
+    try {
+      const url = `http://127.0.0.1:${server.port}/mcp`;
+      const headers = { "Content-Type": "application/json", Accept: "application/json, text/event-stream" };
+      const body = JSON.stringify({ jsonrpc: "2.0", id: 1, method: "tools/list" });
+
+      const statuses: number[] = [];
+      for (let i = 0; i < 3; i++) {
+        const r = await fetch(url, { method: "POST", headers, body });
+        statuses.push(r.status);
+        // Drain the body so undici releases the connection (Node 18's pool
+        // otherwise stalls subsequent requests).
+        await r.text();
+      }
+      // First two clear the limiter (then 400 for the missing session); the
+      // third trips it.
+      expect(statuses).toEqual([400, 400, 429]);
+
+      const metrics = await (await fetch(`http://127.0.0.1:${server.port}/metrics`)).text();
+      expect(metrics).toContain("mina_mcp_requests_total 3");
+      expect(metrics).toContain("mina_mcp_rate_limited_total 1");
+      expect(metrics).toContain("mina_mcp_sessions_active 0");
+    } finally {
+      await server.close();
+    }
+  });
+
+  it("rejects new sessions past maxSessions with 503", async () => {
+    const server = await startHttpServer({
+      port: 0,
+      provider: makeProvider(),
+      mode: "tutorial",
+      maxSessions: 1,
+    });
+    // Open the one allowed session via the SDK client (handles the SSE stream
+    // cleanly — a raw fetch leaves the stream open and stalls Node 18's pool).
+    const client = new Client({ name: "cap-test", version: "0.0.1" });
+    try {
+      await client.connect(
+        new StreamableHTTPClientTransport(new URL(`http://127.0.0.1:${server.port}/mcp`))
+      );
+      expect(server.sessionCount()).toBe(1);
+
+      // A second initialize over a fresh connection must be refused.
+      const second = await fetch(`http://127.0.0.1:${server.port}/mcp`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Accept: "application/json, text/event-stream" },
+        body: JSON.stringify({
+          jsonrpc: "2.0",
+          id: 1,
+          method: "initialize",
+          params: { protocolVersion: "2025-06-18", capabilities: {}, clientInfo: { name: "t", version: "0" } },
+        }),
+      });
+      expect(second.status).toBe(503);
+      expect((await second.json()).error.message).toMatch(/capacity/);
+
+      const metrics = await (await fetch(`http://127.0.0.1:${server.port}/metrics`)).text();
+      expect(metrics).toContain("mina_mcp_sessions_rejected_total 1");
+    } finally {
+      await client.close();
+      await server.close();
+    }
+  });
+});

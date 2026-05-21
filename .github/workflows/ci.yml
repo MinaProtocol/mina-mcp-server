@@ -11,7 +11,10 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        node-version: ["18", "20", "22"]
+        # package.json engines requires node >=20.18.0 (the @o1-labs SDKs
+        # need it). Node 18 is below the floor — don't test an unsupported
+        # runtime.
+        node-version: ["20", "22"]
 
     steps:
       - uses: actions/checkout@v4
