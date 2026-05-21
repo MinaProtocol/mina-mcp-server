@@ -1,6 +1,13 @@
 import { ArchiveClient } from "@o1-labs/mina-archive-sdk";
 import { GraphQLClient } from "../graphql/client.js";
 import { QUERIES } from "../graphql/queries.js";
+import {
+  AccountResponse,
+  BestChainResponse,
+  BlockResponse,
+  GenesisConstantsResponse,
+  validateData,
+} from "../graphql/schemas.js";
 import { AccountsManager } from "../graphql/accounts-manager.js";
 import { SessionTracker } from "../session/tracker.js";
 import { ResetController } from "../reset/controller.js";
@@ -51,13 +58,13 @@ export class TutorialProvider extends SnapshotProvider {
       token: token ?? TutorialProvider.MINA_TOKEN_ID,
     });
     if (result.errors) throw new Error(result.errors[0].message);
-    return (result.data as Record<string, unknown>)?.account ?? null;
+    return validateData(AccountResponse, result.data, "account").account ?? null;
   }
 
   async getBestChain(maxLength = 10) {
     const result = await this.graphql.query(QUERIES.bestChain, { maxLength });
     if (result.errors) throw new Error(result.errors[0].message);
-    return (result.data as Record<string, unknown>)?.bestChain ?? [];
+    return validateData(BestChainResponse, result.data, "bestChain").bestChain ?? [];
   }
 
   async getBlockLive(stateHash?: string, height?: number) {
@@ -87,7 +94,7 @@ export class TutorialProvider extends SnapshotProvider {
       height: null,
     });
     if (result.errors) throw new Error(result.errors[0].message);
-    return (result.data as Record<string, unknown>)?.block ?? null;
+    return validateData(BlockResponse, result.data, "block").block ?? null;
   }
 
   async sendPayment(input: {
@@ -155,7 +162,7 @@ export class TutorialProvider extends SnapshotProvider {
   async getGenesisConstants() {
     const result = await this.graphql.query(QUERIES.genesisConstants);
     if (result.errors) throw new Error(result.errors[0].message);
-    return (result.data as Record<string, unknown>)?.genesisConstants ?? null;
+    return validateData(GenesisConstantsResponse, result.data, "genesisConstants").genesisConstants;
   }
 
   async getNetworkID(): Promise<string> {
