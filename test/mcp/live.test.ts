@@ -66,9 +66,25 @@ describe("MCP Server - Live Mode", () => {
         data: { block: mockBlock },
       });
 
-      const result = await ctx.client.callTool({ name: "get_block", arguments: { stateHash: "3NKtest" } });
+      // detail:"full" returns the raw daemon block (default is the lite summary).
+      const result = await ctx.client.callTool({ name: "get_block", arguments: { stateHash: "3NKtest", detail: "full" } });
       const text = (result.content as Array<{ type: string; text: string }>)[0].text;
       expect(JSON.parse(text)).toEqual(mockBlock);
+    });
+
+    it("get_block defaults to a lite summary with transaction counts", async () => {
+      const mockBlock = {
+        stateHash: "3NKlite",
+        protocolState: { consensusState: { blockHeight: "519000", blockCreator: "B62qc" }, blockchainState: {} },
+        transactions: { userCommands: [{ kind: "PAYMENT" }, { kind: "PAYMENT" }], feeTransfer: [] },
+      };
+      (ctx.mockGraphQL.query as ReturnType<typeof vi.fn>).mockResolvedValueOnce({ data: { block: mockBlock } });
+
+      const result = await ctx.client.callTool({ name: "get_block", arguments: { stateHash: "3NKlite" } });
+      const out = JSON.parse((result.content as Array<{ type: string; text: string }>)[0].text);
+      expect(out.height).toBe("519000");
+      expect(out.transactionCounts.userCommands).toBe(2);
+      expect(out.userCommands).toBeUndefined();
     });
 
     it("rejects height-only lookups with a hint to use get_archive_blocks", async () => {
@@ -153,7 +169,7 @@ describe("MCP Server - Live Mode", () => {
     it("rosetta_block by index forwards a {index} block_identifier", async () => {
       (ctx.mockRosetta.block as ReturnType<typeof vi.fn>).mockResolvedValueOnce({ block: { block_identifier: { index: 100, hash: "h100" } } });
 
-      const result = await ctx.client.callTool({ name: "rosetta_block", arguments: { index: 100 } });
+      const result = await ctx.client.callTool({ name: "rosetta_block", arguments: { index: 100, detail: "full" } });
       const text = (result.content as Array<{ type: string; text: string }>)[0].text;
       expect(JSON.parse(text)).toMatchObject({ block: { block_identifier: { index: 100 } } });
       expect(ctx.mockRosetta.block).toHaveBeenCalledWith({ index: 100 });

@@ -2,6 +2,35 @@ import { z } from "zod";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { AnyProvider, Mode } from "../server-factory.js";
 import { TutorialProvider } from "../providers/tutorial.js";
+import {
+  DEFAULT_TX_LIMIT,
+  renderShaped,
+  shapeBestChain,
+  shapeDaemonBlock,
+  type Detail,
+} from "./shape.js";
+
+const detailArg = z
+  .enum(["lite", "transactions", "full"])
+  .default("lite")
+  .describe(
+    'Output size. "lite" (default): block header + transaction counts only — always within budget. ' +
+      '"transactions": header + a page of userCommands (see transactionLimit/Offset). ' +
+      '"full": the complete daemon response — may overflow the tool budget on busy networks.',
+  );
+
+const txLimitArg = z
+  .number()
+  .min(1)
+  .max(100)
+  .default(DEFAULT_TX_LIMIT)
+  .describe('Max userCommands to return when detail="transactions".');
+
+const txOffsetArg = z
+  .number()
+  .min(0)
+  .default(0)
+  .describe('Offset into the userCommands list when detail="transactions".');
 
 export function registerBlockTools(
   server: McpServer,
@@ -11,22 +40,35 @@ export function registerBlockTools(
   if (mode !== "snapshot") {
     server.tool(
       "get_block",
-      "[business] Get a block by state hash or height. In tutorial mode, queries the live daemon first and falls back to the archive DB. In live mode, a stateHash is required (use get_archive_blocks to discover one).",
+      'Get a block by state hash or height. Defaults to a "lite" summary (header + ' +
+        "transaction counts) that stays within the tool budget; use detail to pull paged " +
+        "transactions or the full block. In tutorial mode, queries the live daemon first and " +
+        "falls back to the archive DB. In live mode, a stateHash is required (use " +
+        "get_archive_blocks to discover one).",
       {
         stateHash: z.string().optional().describe("Block state hash"),
         height: z.number().optional().describe("Block height"),
+        detail: detailArg,
+        transactionLimit: txLimitArg,
+        transactionOffset: txOffsetArg,
       },
-      async ({ stateHash, height }) => {
+      async ({ stateHash, height, detail, transactionLimit, transactionOffset }) => {
         const provider = getProvider();
+        const opts = { detail: detail as Detail, transactionLimit, transactionOffset };
 
         if (provider instanceof TutorialProvider && (stateHash || height)) {
           const result = await provider.getBlockLive(stateHash, height);
           if (result) {
-            return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
+            return renderShaped(
+              shapeDaemonBlock(result as Record<string, unknown>, opts),
+              opts.detail
+            );
           }
         }
 
-        // Fall back to archive DB (tutorial mode only — live has no DB).
+        // Fall back to archive DB (tutorial mode only — live has no DB). The DB
+        // shape differs from the daemon's and these blocks are small, so it's
+        // returned as-is rather than run through the daemon-block shaper.
         const key = stateHash ?? height;
         if (!key) {
           return {
@@ -62,11 +104,14 @@ export function registerBlockTools(
   if (mode !== "snapshot") {
     server.tool(
       "get_best_chain",
-      "[business] Get the current best chain from the live daemon.",
+      "Get the current best chain from the live daemon. Returns per-block headers + " +
+        "transaction counts (always within budget) — use get_block for a specific block's " +
+        'transactions. detail:"full" returns complete blocks and may overflow on busy networks.',
       {
         maxLength: z.number().min(1).max(290).default(10).describe("Maximum number of blocks to return"),
+        detail: detailArg,
       },
-      async ({ maxLength }) => {
+      async ({ maxLength, detail }) => {
         const provider = getProvider();
         if (!(provider instanceof TutorialProvider)) {
           return {
@@ -74,7 +119,15 @@ export function registerBlockTools(
           };
         }
         const result = await provider.getBestChain(maxLength);
-        return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
+        const opts = {
+          detail: detail as Detail,
+          transactionLimit: DEFAULT_TX_LIMIT,
+          transactionOffset: 0,
+        };
+        return renderShaped(
+          shapeBestChain(result as Record<string, unknown>[], opts),
+          opts.detail
+        );
       }
     );
   }
