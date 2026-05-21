@@ -1,0 +1,70 @@
+name: Release
+
+# Publishes the package to npm via OIDC trusted publishing when a `v*` tag
+# is pushed. No NPM_TOKEN required.
+#
+# Trusted publishing: register this workflow on npmjs.com under the
+# `@o1-labs/mina-mcp-server` package settings — Trusted Publisher → GitHub
+# Actions → repository `MinaProtocol/mina-mcp-server`, workflow `release.yml`,
+# environment `npm`. Once registered, the OIDC `id-token` claim authenticates
+# the publish step.
+#
+# First publish: a brand-new package needs either a pre-configured "pending"
+# trusted publisher on npmjs.com, or one manual `npm publish` to create
+# `@o1-labs/mina-mcp-server` under the scope; OIDC handles every release after.
+#
+# Release flow:
+#   - bump version in package.json
+#   - git tag vX.Y.Z && git push origin vX.Y.Z
+#
+# Note: this only publishes the npm package (stdio / npx distribution). The
+# hosted fly.io sandbox is deployed separately by deploy.yml.
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    environment: npm
+    permissions:
+      contents: write # for `gh release create`
+      id-token: write # for OIDC trusted publishing
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20.18.0'
+          registry-url: 'https://registry.npmjs.org'
+          cache: 'npm'
+
+      # OIDC trusted publishing (the OIDC -> npm token exchange) requires
+      # npm >= 11.5.1. Node 20 ships npm 10.x, which signs provenance via
+      # GitHub OIDC but cannot authenticate the publish itself, so the
+      # registry rejects the PUT with a 404. Upgrade before publishing.
+      - run: npm install -g npm@latest
+      - run: npm --version
+
+      - run: npm ci
+      - run: npm run build
+      - run: npm run test:unit
+      - run: npm run test:mcp
+
+      - name: Verify tag matches package.json version
+        run: |
+          tag="${GITHUB_REF_NAME#v}"
+          pkg=$(node -e "console.log(require('./package.json').version)")
+          if [ "$tag" != "$pkg" ]; then
+            echo "tag $GITHUB_REF_NAME does not match package.json $pkg"; exit 1
+          fi
+
+      - name: Publish to npm
+        run: npm publish --provenance --access public
+
+      - name: Create GitHub release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: gh release create "${{ github.ref_name }}" --generate-notes

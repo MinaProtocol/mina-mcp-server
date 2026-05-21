@@ -40,7 +40,7 @@ You can bring this up with `docker-compose.snapshot.yml` (ships in the repo). A 
 
 All four are brought up by `docker-compose.tutorial.yml`. Expect ~1–2 minutes for the network to sync before tools respond correctly.
 
-> **Note:** if you install from npm (`npx @o1labs/mina-mcp-server`), the docker-compose files are *not* included in the tarball — you will need to clone this repo, or copy the `docker-compose.*.yml` files out of it, to start the infra.
+> **Note:** if you install from npm (`npx @o1-labs/mina-mcp-server`), the docker-compose files are *not* included in the tarball — you will need to clone this repo, or copy the `docker-compose.*.yml` files out of it, to start the infra.
 
 ## Quick Start
 
@@ -375,7 +375,7 @@ Once the backing infrastructure is up (see [Prerequisites](#prerequisites)), reg
   "mcpServers": {
     "mina": {
       "command": "npx",
-      "args": ["-y", "-p", "@o1labs/mina-mcp-server@beta", "mina-mcp-server", "--mode", "snapshot"]
+      "args": ["-y", "@o1-labs/mina-mcp-server", "--mode", "snapshot"]
     }
   }
 }
@@ -432,7 +432,7 @@ The first session call returns a `Mcp-Session-Id` header that the client must ec
 
 ## Roadmap
 
-- **Bundled SQLite snapshot** — replace the Postgres requirement in snapshot mode with a SQLite file shipped inside the package, so `npx @o1labs/mina-mcp-server --mode snapshot` runs with zero infra.
+- **Bundled SQLite snapshot** — replace the Postgres requirement in snapshot mode with a SQLite file shipped inside the package, so `npx @o1-labs/mina-mcp-server --mode snapshot` runs with zero infra.
 - **Live mode** — connect to hosted public devnet / mainnet GraphQL + archive endpoints, so live chain queries work without any local setup.
 - **Tutorial mode** — will remain infrastructure-dependent (local lightnet), as it is intended for development against a controllable network.
 

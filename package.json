@@ -1,11 +1,41 @@
 {
-  "name": "mina-mcp-server",
+  "name": "@o1-labs/mina-mcp-server",
   "version": "0.5.0",
   "description": "MCP server for Mina Protocol daemon and archive node",
   "type": "module",
   "main": "dist/index.js",
   "bin": {
     "mina-mcp-server": "dist/index.js"
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "engines": {
+    "node": ">=20.18.0"
+  },
+  "keywords": [
+    "mina",
+    "mina-protocol",
+    "mcp",
+    "model-context-protocol",
+    "blockchain",
+    "graphql",
+    "ai"
+  ],
+  "homepage": "https://github.com/MinaProtocol/mina-mcp-server",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/MinaProtocol/mina-mcp-server.git"
+  },
+  "bugs": {
+    "url": "https://github.com/MinaProtocol/mina-mcp-server/issues"
+  },
+  "author": "O(1) Labs <build@o1labs.org>",
+  "license": "Apache-2.0",
+  "publishConfig": {
+    "access": "public"
   },
   "scripts": {
     "build": "tsc -p tsconfig.json",
@@ -18,7 +48,8 @@
     "test:watch": "vitest",
     "test:unit": "vitest run test/unit",
     "test:mcp": "vitest run test/mcp",
-    "test:integration": "vitest run test/integration --test-timeout 120000"
+    "test:integration": "vitest run test/integration --test-timeout 120000",
+    "prepublishOnly": "npm run build"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.12.1",
@@ -35,6 +66,5 @@
     "@types/pg": "^8.11.10",
     "typescript": "^5.7.0",
     "vitest": "^3.1.1"
-  },
-  "license": "Apache-2.0"
+  }
 }
