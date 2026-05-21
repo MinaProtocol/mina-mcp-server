@@ -18,6 +18,14 @@ on:
     # 06:30 UTC daily. Offset from the deployed-smoke run (06:00) so the
     # two notifications don't pile up if something goes broadly wrong.
     - cron: "30 6 * * *"
+  pull_request:
+    # Advisory signal on PRs that touch runtime or this smoke. It depends on
+    # public endpoints, so it can flake on upstream hiccups — keep it OUT of
+    # required status checks; the mocked test/mcp suite is the real PR gate.
+    paths:
+      - "src/**"
+      - "scripts/smoke-live.sh"
+      - ".github/workflows/smoke-live.yml"
   workflow_dispatch:
     inputs:
       networks:

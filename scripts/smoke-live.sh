@@ -142,11 +142,56 @@ if [ -n "$STATE_HASH" ]; then
   require "get_block round-trip returned the same stateHash" 'contains "$BLOCK" "$STATE_HASH"'
 fi
 
-# 7. rosetta_status — Data API round-trip.
-echo "[rosetta_status]"
-ROSETTA=$(mcp_call '{"jsonrpc":"2.0","id":6,"method":"tools/call","params":{"name":"rosetta_status","arguments":{}}}')
+# 6b. Broader read-only coverage. Each call asserts the live GraphQL/archive
+# round-trip returned a recognizable shape — the early-warning signal for
+# upstream schema drift. (#24)
+echo "[read-only tools]"
+
+SYNC=$(mcp_call '{"jsonrpc":"2.0","id":7,"method":"tools/call","params":{"name":"get_sync_status","arguments":{}}}')
+SYNC_OK=0
+for s in SYNCED BOOTSTRAP CATCHUP OFFLINE; do contains "$SYNC" "$s" && SYNC_OK=1 && break; done
+require "get_sync_status returns a recognized status" '[ "$SYNC_OK" = "1" ]'
+
+NETID=$(mcp_call '{"jsonrpc":"2.0","id":8,"method":"tools/call","params":{"name":"get_network_id","arguments":{}}}')
+require "get_network_id returns a mina: network id" 'contains "$NETID" "mina:"'
+
+GENESIS=$(mcp_call '{"jsonrpc":"2.0","id":9,"method":"tools/call","params":{"name":"get_genesis_constants","arguments":{}}}')
+require "get_genesis_constants returns coinbase" 'contains "$GENESIS" "coinbase"'
+
+NETSTATE=$(mcp_call '{"jsonrpc":"2.0","id":10,"method":"tools/call","params":{"name":"get_network_state","arguments":{}}}')
+require "get_network_state returns a canonical max block height" 'contains "$NETSTATE" "canonicalMaxBlockHeight"'
+
+CHAIN=$(mcp_call '{"jsonrpc":"2.0","id":11,"method":"tools/call","params":{"name":"get_best_chain","arguments":{"maxLength":3}}}')
+require "get_best_chain returns blocks (stateHash)" 'contains "$CHAIN" "stateHash"'
+
+EXAMPLES=$(mcp_call '{"jsonrpc":"2.0","id":12,"method":"tools/call","params":{"name":"list_examples","arguments":{}}}')
+require "list_examples returns example summaries" 'contains "$EXAMPLES" "summary"'
+
+# get_account against a real on-chain account: the block creator we just saw.
+CREATOR=$(echo "$BLOCKS" | grep -oE '\\"creator\\":\s*\\"B62[A-Za-z0-9]+\\"' | head -1 | sed -E 's/.*\\"creator\\":\s*\\"([^\\]+)\\".*/\1/')
+if [ -n "$CREATOR" ]; then
+  ACCT=$(mcp_call "{\"jsonrpc\":\"2.0\",\"id\":13,\"method\":\"tools/call\",\"params\":{\"name\":\"get_account\",\"arguments\":{\"publicKey\":\"$CREATOR\"}}}")
+  require "get_account returns a balance for the block creator" 'contains "$ACCT" "balance"'
+fi
+
+# 7. Rosetta Data API round-trips.
+echo "[rosetta_status / block / account / mempool]"
+ROSETTA=$(mcp_call '{"jsonrpc":"2.0","id":14,"method":"tools/call","params":{"name":"rosetta_status","arguments":{}}}')
 require "rosetta_status returned current_block_identifier" 'contains "$ROSETTA" "current_block_identifier"'
 require "rosetta_status returned sync_status"               'contains "$ROSETTA" "sync_status"'
+
+if [ -n "$STATE_HASH" ]; then
+  RBLOCK=$(mcp_call "{\"jsonrpc\":\"2.0\",\"id\":15,\"method\":\"tools/call\",\"params\":{\"name\":\"rosetta_block\",\"arguments\":{\"hash\":\"$STATE_HASH\"}}}")
+  require "rosetta_block by hash returned a block_identifier" 'contains "$RBLOCK" "block_identifier"'
+fi
+
+if [ -n "$CREATOR" ]; then
+  RACCT=$(mcp_call "{\"jsonrpc\":\"2.0\",\"id\":16,\"method\":\"tools/call\",\"params\":{\"name\":\"rosetta_account\",\"arguments\":{\"address\":\"$CREATOR\"}}}")
+  require "rosetta_account returned balances" 'contains "$RACCT" "balances"'
+fi
+
+RMEMPOOL=$(mcp_call '{"jsonrpc":"2.0","id":17,"method":"tools/call","params":{"name":"rosetta_mempool","arguments":{}}}')
+require "rosetta_mempool returned transaction_identifiers" 'contains "$RMEMPOOL" "transaction_identifiers"'
 
 # 8. Tear down session explicitly (cleanup() also handles process kill).
 curl -sS --max-time 5 -X DELETE "$MCP_URL" -H "Mcp-Session-Id: $SESSION" >/dev/null || true
