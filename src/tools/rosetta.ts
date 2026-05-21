@@ -141,14 +141,8 @@ export function registerRosettaTools(
     async ({ hash }) => {
       const rosetta = rosettaOf(getProvider());
       if (!rosetta) return { content: [{ type: "text", text: NOT_AVAILABLE_MSG }] };
-      // SDK doesn't (yet) wrap /mempool/transaction — go through its public
-      // post() so we still get retry/timeout/network_identifier handling.
       const r = await safeCall(
-        () =>
-          rosetta.post("/mempool/transaction", {
-            network_identifier: rosetta.network,
-            transaction_identifier: { hash },
-          }),
+        () => rosetta.mempoolTransaction(hash),
         "rosetta_mempool_transaction"
       );
       return {

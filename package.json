@@ -23,7 +23,7 @@
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.12.1",
     "@o1-labs/mina-archive-sdk": "^0.0.1",
-    "@o1-labs/mina-rosetta-sdk": "^0.0.1",
+    "@o1-labs/mina-rosetta-sdk": "^0.0.2",
     "@o1-labs/mina-sdk": "^0.2.3",
     "express": "^4.21.0",
     "mina-signer": "3.0.7",
