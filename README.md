@@ -137,7 +137,11 @@ MINA_MCP_MODE=live MINA_MCP_NETWORK=devnet MINA_MCP_WALLETS=./wallets.json npm s
 ```json
 {
   "wallets": {
-    "warm": { "keyPath": "/home/me/.mina/keys/warm.key", "publicKey": "B62q…" },
+    "warm": {
+      "keyPath": "/home/me/.mina/keys/warm.key",
+      "publicKey": "B62q…",
+      "caps": { "maxFeeNanomina": "100000000", "maxAmountNanomina": "5000000000" }
+    },
     "demo": { "keyPath": "/home/me/.mina/keys/demo.key", "publicKey": "B62q…" }
   },
   "defaultWallet": "warm"
@@ -147,6 +151,7 @@ MINA_MCP_MODE=live MINA_MCP_NETWORK=devnet MINA_MCP_WALLETS=./wallets.json npm s
 - `keyPath` files must contain exactly one `EK…` base58check private key (one line, no other content). Encrypted JSON key files are not supported in this revision.
 - `keyPath` files **must** be `chmod 600`; the loader refuses to start otherwise.
 - `publicKey` is verified at startup against the loaded key — catches "wrong key for this alias" mistakes before any tool runs.
+- `caps` (optional, per wallet) bound a single transaction: `maxFeeNanomina` and `maxAmountNanomina` (decimal nanomina, 1 MINA = 1e9). A send exceeding a cap is **refused before signing** — a guardrail against a runaway/adversarial LLM draining a wallet. Memos are always capped at 32 bytes.
 - `defaultWallet` is optional; if omitted, every `send_payment`/`send_delegation` call must pass `from_alias` or `from`.
 - Paths may be relative to the config file's directory (so the whole bundle is portable).
 

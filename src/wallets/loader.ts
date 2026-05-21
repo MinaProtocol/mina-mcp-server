@@ -1,7 +1,7 @@
 import { promises as fs, statSync } from "node:fs";
 import path from "node:path";
 import MinaSigner from "mina-signer";
-import { LoadedWallet, RawWalletEntry, WalletRegistry, WalletsConfig } from "./types.js";
+import { LoadedWallet, RawWalletEntry, WalletCaps, WalletRegistry, WalletsConfig } from "./types.js";
 
 // Anything wider than these mode bits in the bottom 6 (group+other rwx) is
 // rejected. 0600 is allowed; 0640, 0644, 0660 etc. all fail.
@@ -94,7 +94,8 @@ function parseConfig(raw: unknown, configPath: string): WalletsConfig {
         `Wallet '${alias}': missing or invalid publicKey (must start with B62q).`
       );
     }
-    parsedWallets[alias] = { keyPath: e.keyPath, publicKey: e.publicKey };
+    const caps = parseCaps(alias, e.caps);
+    parsedWallets[alias] = { keyPath: e.keyPath, publicKey: e.publicKey, ...(caps ? { caps } : {}) };
   }
   if (Object.keys(parsedWallets).length === 0) {
     throw new WalletLoadError(
@@ -104,6 +105,29 @@ function parseConfig(raw: unknown, configPath: string): WalletsConfig {
   const defaultWallet =
     typeof obj.defaultWallet === "string" ? obj.defaultWallet : undefined;
   return { wallets: parsedWallets, defaultWallet };
+}
+
+// Parse optional per-wallet spend caps. Each cap is a non-negative integer
+// number of nanomina (accepts a JSON number or a decimal string).
+function parseCaps(alias: string, raw: unknown): WalletCaps | undefined {
+  if (raw === undefined) return undefined;
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) {
+    throw new WalletLoadError(`Wallet '${alias}': caps must be an object.`);
+  }
+  const c = raw as Record<string, unknown>;
+  const caps: WalletCaps = {};
+  for (const field of ["maxFeeNanomina", "maxAmountNanomina"] as const) {
+    const v = c[field];
+    if (v === undefined) continue;
+    const s = typeof v === "number" ? String(v) : v;
+    if (typeof s !== "string" || !/^\d+$/.test(s)) {
+      throw new WalletLoadError(
+        `Wallet '${alias}': caps.${field} must be a non-negative integer (nanomina).`
+      );
+    }
+    caps[field] = s;
+  }
+  return Object.keys(caps).length ? caps : undefined;
 }
 
 async function loadOne(
@@ -166,7 +190,12 @@ async function loadOne(
     );
   }
 
-  return { alias, publicKey: entry.publicKey, privateKey: keyContents };
+  return {
+    alias,
+    publicKey: entry.publicKey,
+    privateKey: keyContents,
+    ...(entry.caps ? { caps: entry.caps } : {}),
+  };
 }
 
 function resolveDefault(
