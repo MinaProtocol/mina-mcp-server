@@ -17,6 +17,12 @@ it are summarized from the git history.
   `CODE_OF_CONDUCT.md`, issue/PR templates, and a prompt cookbook
   (`docs/examples.md`).
 - `server.json` manifest for the official MCP registry.
+- `--help` and `--version` CLI flags.
+- README distribution rework: a "which mode?" decision flow, a multi-client
+  config matrix (Claude Desktop/Code, Cursor, Cline, Windsurf, Continue, Zed),
+  a verify-it-works smoke prompt, a troubleshooting section, an env-var/flag
+  table, and badges. Expanded the prompt cookbook to structured, copy-paste
+  examples.
 
 ### Changed
 

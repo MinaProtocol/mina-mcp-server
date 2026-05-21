@@ -1,24 +1,128 @@
 # mina-mcp-server
 
+[![npm version](https://img.shields.io/npm/v/@o1-labs/mina-mcp-server.svg)](https://www.npmjs.com/package/@o1-labs/mina-mcp-server)
+[![license](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
+[![MCP](https://img.shields.io/badge/MCP-compatible-success.svg)](https://modelcontextprotocol.io)
+
 MCP (Model Context Protocol) server for the [Mina Protocol](https://minaprotocol.com/) blockchain. Exposes Mina blockchain data and operations through MCP-compatible tools that can be used by AI assistants and other MCP clients.
+
+**New here?** Jump to [Which mode do I want?](#which-mode-do-i-want) → [Connect your MCP client](#connect-your-mcp-client) → [Verify it works](#verify-it-works). For copy-paste prompts, see the [prompt cookbook](docs/examples.md).
 
 > **Status: beta / preview.** **Live mode** talks to public Mina networks (devnet / mainnet / mesa) and needs **no local infrastructure** — run `npx @o1-labs/mina-mcp-server --mode live --network devnet`, or point your client at the [hosted sandbox](#deploying-on-flyio). **Snapshot** and **tutorial** modes are thin MCP layers over backing services (PostgreSQL, and for tutorial a local Mina lightnet) that you must stand up yourself first — see [Prerequisites](#prerequisites). A bundled SQLite snapshot for zero-infra *snapshot* mode is planned ([#28](https://github.com/MinaProtocol/mina-mcp-server/issues/28)).
 
 ## Features
 
-- **24+ MCP tools** for querying accounts, blocks, transactions, zkApp events/actions, network status, and more
-- **Two operating modes:**
-  - **Snapshot** — **schema explorer only**: SQL access (`query_archive_sql`, `get_archive_schema`) + DB connectivity probe. Read-only against a frozen archive Postgres dump. Useful for ad-hoc analytics over historical chain data.
-  - **Tutorial** — full read/write access to a live Mina lightnet (daemon, archive, test accounts)
-  - **Live** — read-only proxy to a public Mina network (devnet/mainnet/mesa); no local infra
-- **Safe SQL access** — read-only queries against the archive database with timeout protection
-- **Test account faucet** — acquire/release pre-funded accounts for testing (tutorial mode)
+- **40+ MCP tools** for querying accounts, blocks, transactions, zkApp events/actions, network/sync status, Rosetta, and archive SQL.
+- **Three operating modes:**
+  - **Live** — read-only proxy to a public Mina network (devnet/mainnet/mesa). **No local infra** — the zero-setup default.
+  - **Tutorial** — full read/write against a local Mina lightnet (daemon, archive, test-account faucet).
+  - **Snapshot** — schema-only SQL access (`query_archive_sql`, `get_archive_schema`) against a frozen archive Postgres dump.
+- **Standardized Rosetta** Data API tools (live mode) alongside the native GraphQL ones.
+- **Safe SQL access** — read-only queries against the archive DB with timeout protection.
+- **Test-account faucet** — acquire/release pre-funded accounts (tutorial mode).
+- **[Prompt cookbook](docs/examples.md)** — copy-paste prompts that drive end-to-end tool sequences.
+
+## Which mode do I want?
+
+| You want to… | Mode | Infra needed |
+|---|---|---|
+| **Query a public network** (balances, blocks, zkApp events, Rosetta) | **`live`** | None — just `npx`. **Start here.** |
+| **Send transactions on a public network** with your own keys | **`live` + `--wallets`** | None (keys signed in-process) |
+| **Develop against a controllable chain** (faucet, reset, write) | **`tutorial`** | Local Mina lightnet ([Prerequisites](#prerequisites)) |
+| **Run analytics SQL over a historical archive dump** | **`snapshot`** | A Postgres archive dump ([Prerequisites](#prerequisites)) |
+
+Most people want **`live`** — it needs nothing installed beyond Node.
+
+## Connect your MCP client
+
+**Local (recommended), via `npx` — no clone, no infra:**
+
+```json
+{
+  "mcpServers": {
+    "mina": {
+      "command": "npx",
+      "args": ["-y", "@o1-labs/mina-mcp-server", "--mode", "live", "--network", "devnet"]
+    }
+  }
+}
+```
+
+Swap `devnet` for `mainnet` or `mesa`. For other modes, change `--mode` (and drop `--network`); see [Configuration](#configuration).
+
+**Hosted sandbox (zero install) — point your client at the URL:**
+
+```json
+{ "mcpServers": { "mina": { "url": "https://mina-mcp-sandbox.fly.dev/mcp" } } }
+```
+
+The hosted sandbox runs **tutorial mode** against a shared lightnet (best-effort, no SLA). Use local `live` mode for real networks.
+
+**Where the config lives, per client:**
+
+| Client | Config | Notes |
+|---|---|---|
+| Claude Desktop | `claude_desktop_config.json` (Settings → Developer) | `command`/`args` shape above |
+| Claude Code | `.mcp.json` in the project, or `claude mcp add` | same shape |
+| Cursor | `~/.cursor/mcp.json` (or Settings → MCP) | same shape |
+| Cline / Roo | the extension's MCP settings JSON | same shape |
+| Windsurf | `~/.codeium/windsurf/mcp_config.json` | same shape |
+| Continue | `~/.continue/config.json` under `mcpServers` | same shape |
+| Zed | `settings.json` under `context_servers` | Zed uses `"command": { "path": "npx", "args": [...] }` |
+
+All clients except Zed take the same `{ command, args }` object; only the file location differs. Hosted-URL configs work in any client that supports a remote/streamable-HTTP MCP server.
+
+## Verify it works
+
+After wiring it up, ask your assistant:
+
+> **"Describe the current Mina network state."**
+
+It should call `describe_state` and return a snapshot with `syncStatus` (e.g. `SYNCED`), the network name, and mempool size. That's your green light. (On `mesa`, expect a `PREFLIGHT` caveat in the hints.)
+
+## Configuration
+
+All flags have environment-variable equivalents; run `npx @o1-labs/mina-mcp-server --help` for the full surface.
+
+```
+$ mina-mcp-server --help
+USAGE
+  mina-mcp-server [--mode <mode>] [options]
+
+MODES
+  live        Read-only proxy to a public network. No local infra. (use --network)
+  tutorial    Read+write against a local Mina lightnet (daemon + archive + faucet).
+  snapshot    Schema-only SQL access against a frozen archive Postgres dump. (default)
+```
+
+| Flag | Env var | Values (default) |
+|---|---|---|
+| `--mode` | `MINA_MCP_MODE` | `live` / `tutorial` / `snapshot` (`snapshot`) |
+| `--network` | `MINA_MCP_NETWORK` | `devnet` / `mainnet` / `mesa` (live only) |
+| `--transport` | `MINA_MCP_TRANSPORT` | `stdio` / `http` (`stdio`) |
+| `--wallets` | `MINA_MCP_WALLETS` | path to `wallets.json` (live-write) |
+| `--allow-mainnet-writes` | `MINA_MCP_ALLOW_MAINNET_WRITES=1` | opt-in gate for mainnet sends |
+| _(http only)_ | `MINA_MCP_HTTP_PORT` | port for `--transport http` (`3000`) |
+| `--help`, `--version` | — | print help / version and exit |
+
+## Troubleshooting
+
+| Symptom | Fix |
+|---|---|
+| `npx` fails / "Unsupported engine" | Needs **Node ≥ 20.18**. Check `node --version`. |
+| Tools return "not reachable" in `tutorial`/`snapshot` | The server does **not** start infra — bring up the lightnet/Postgres first ([Prerequisites](#prerequisites)). |
+| Port already in use (`tutorial` lightnet) | Another lightnet/daemon is bound to 3085/8282/5432; stop it or remap ports. |
+| Changes not taking effect after editing source | Re-run `npm run build` (the client runs `dist/`, not `src/`). |
+| Hosted server: "Missing/!Unknown session id" | Your client must echo the `Mcp-Session-Id` header from `initialize` on every request — use a client that supports streamable-HTTP MCP. |
+| `mesa` data looks unstable | `mesa` is a **preflight** network — it can reset/rename without notice. Treat its data as ephemeral. |
 
 ## Prerequisites
 
-**Common (all modes):**
+> Only needed for **`tutorial`** and **`snapshot`** modes. **`live` mode needs none of this.**
 
-- Node.js >= 18
+**Common:**
+
+- Node.js >= 20.18
 - Docker & Docker Compose (to run the backing services below)
 
 **Snapshot mode additionally requires:**
@@ -219,9 +323,9 @@ drives the following tool sequence (excerpted from a real tutorial-mode run):
 
 End-to-end wall-clock was a few seconds on a synced lightnet. The flow exercises every tutorial-only tool family in one go — faucet/return, payment submission, mempool, status polling, block/account lookup — making it a useful smoke check after deploy.
 
-## Configuration
+## Infrastructure configuration (tutorial / snapshot)
 
-Copy `.env.example` to `.env` and adjust as needed:
+These configure where the backing services live; `live` mode doesn't use them. Copy `.env.example` to `.env` and adjust as needed:
 
 ```bash
 cp .env.example .env
@@ -366,24 +470,11 @@ When running in tutorial mode with `docker-compose.tutorial.yml`, the following 
 | Archive-Node-API | `http://localhost:8282/` | Archive GraphQL (events/actions) |
 | PostgreSQL | `localhost:5432` | Archive database |
 
-## Using with Claude Desktop / Claude Code
+## Using with tutorial / snapshot mode
 
-Once the backing infrastructure is up (see [Prerequisites](#prerequisites)), register the MCP server with your MCP client. Example for Claude Desktop (`claude_desktop_config.json`) or Claude Code (`.mcp.json`):
+Client config is the same `{ command, args }` shown in [Connect your MCP client](#connect-your-mcp-client) — just change `--mode` to `tutorial` or `snapshot` (and drop `--network`). The difference is the **infrastructure**: these modes talk to local services, so bring those up first (see [Prerequisites](#prerequisites) and [Quick Start](#quick-start)).
 
-```json
-{
-  "mcpServers": {
-    "mina": {
-      "command": "npx",
-      "args": ["-y", "@o1-labs/mina-mcp-server", "--mode", "snapshot"]
-    }
-  }
-}
-```
-
-For tutorial mode, replace `snapshot` with `tutorial` and make sure the lightnet is running first.
-
-**The MCP server will not start the infrastructure for you.** If Postgres / daemon / archive-node-api / accounts-manager are not reachable, tools will return connection errors.
+**The MCP server will not start the infrastructure for you.** If Postgres / daemon / archive-node-api / accounts-manager are not reachable, tools return connection errors — that's expected, not a bug.
 
 ## Deploying on Fly.io
 
