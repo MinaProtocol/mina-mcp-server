@@ -11,7 +11,7 @@ export function registerAccountTools(
   if (mode !== "snapshot") {
     server.tool(
       "get_account",
-      "[business] Get account information by public key from the live daemon (tutorial + live modes).",
+      "Get account information by public key from the live daemon (tutorial + live modes).",
       { publicKey: z.string().describe("Mina public key (B62...)"), token: z.string().optional().describe("Token ID (optional, defaults to MINA)") },
       async ({ publicKey, token }) => {
         const provider = getProvider();
@@ -30,7 +30,7 @@ export function registerAccountTools(
   if (mode === "tutorial") {
     server.tool(
       "get_staking_ledger",
-      "[business] Get staking ledger entries from the archive database. Returns up to 100 accounts with their staking info.",
+      "Get staking ledger entries from the archive database. Returns up to 100 accounts with their staking info.",
       { epoch: z.number().optional().describe("Epoch number (optional)") },
       async ({ epoch }) => {
         const provider = getProvider();

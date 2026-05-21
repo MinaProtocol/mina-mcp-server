@@ -12,7 +12,7 @@ export function registerTransactionTools(
   if (mode === "tutorial") {
     server.tool(
       "get_transaction",
-      "[business] Look up a transaction by its hash in the archive database.",
+      "Look up a transaction by its hash in the archive database.",
       { hash: z.string().describe("Transaction hash") },
       async ({ hash }) => {
         const provider = getProvider();
@@ -26,7 +26,7 @@ export function registerTransactionTools(
 
     server.tool(
       "search_transactions",
-      "[business] Search user commands in the archive database by sender, receiver, and/or amount range.",
+      "Search user commands in the archive database by sender, receiver, and/or amount range.",
       {
         sender: z.string().optional().describe("Sender public key"),
         receiver: z.string().optional().describe("Receiver public key"),
@@ -54,8 +54,8 @@ export function registerTransactionTools(
     server.tool(
       "send_payment",
       isLiveWrite
-        ? "[business] Send a MINA payment from a loaded wallet (live-write mode). Signs client-side with mina-signer and submits via the daemon. Use `list_wallets` to see configured aliases. Pass `dry_run: true` to inspect the signed payload without submitting."
-        : "[business] Send a MINA payment between accounts (tutorial mode). Uses the daemon's wallet to sign.",
+        ? "Send a MINA payment from a loaded wallet (live-write mode). Signs client-side with mina-signer and submits via the daemon. Use `list_wallets` to see configured aliases. Pass `dry_run: true` to inspect the signed payload without submitting."
+        : "Send a MINA payment between accounts (tutorial mode). Uses the daemon's wallet to sign.",
       {
         from: z.string().optional().describe("Sender public key. In tutorial mode this must be a daemon-tracked key; in live-write mode it's resolved against the loaded wallets. Either this or from_alias is required (unless a defaultWallet is configured)."),
         from_alias: z.string().optional().describe("[live-write] Wallet alias from wallets.json (e.g. 'warm', 'demo'). Mutually exclusive with passing a different `from`."),
@@ -118,8 +118,8 @@ export function registerTransactionTools(
     server.tool(
       "send_delegation",
       isLiveWrite
-        ? "[business] Delegate stake from a loaded wallet to a block producer (live-write mode). Signs client-side, submits via the daemon. Pass `dry_run: true` to inspect without submitting."
-        : "[business] Delegate stake to a block producer (tutorial mode).",
+        ? "Delegate stake from a loaded wallet to a block producer (live-write mode). Signs client-side, submits via the daemon. Pass `dry_run: true` to inspect without submitting."
+        : "Delegate stake to a block producer (tutorial mode).",
       {
         from: z.string().optional().describe("Delegator public key (tutorial: must be daemon-tracked; live-write: resolved against loaded wallets)."),
         from_alias: z.string().optional().describe("[live-write] Wallet alias from wallets.json."),
@@ -179,7 +179,10 @@ export function registerTransactionTools(
   if (mode !== "snapshot") {
     server.tool(
       "get_transaction_status",
-      "[business] Check the status of a pending transaction.",
+      "Check the daemon's status for a submitted transaction (PENDING / INCLUDED / " +
+        "UNKNOWN). Pass the id returned by send_payment as `payment` (or a zkApp tx id " +
+        "as `zkappTransaction`) — exactly one. Use this to poll after a send; for an " +
+        "already-mined tx, prefer get_transaction / search_transactions against the archive.",
       {
         payment: z.string().optional().describe("Payment transaction ID"),
         zkappTransaction: z.string().optional().describe("zkApp transaction ID"),
@@ -204,7 +207,9 @@ export function registerTransactionTools(
 
     server.tool(
       "get_mempool",
-      "[business] View pending transactions in the mempool.",
+      "List transactions currently pending in the daemon's mempool (not yet in a block), " +
+        "optionally filtered by `publicKey`. Returns sender/receiver/amount/fee/nonce per " +
+        "command. Empty once everything has been included — it does not show mined txs.",
       {
         publicKey: z.string().optional().describe("Filter by public key"),
       },

@@ -41,7 +41,7 @@ export function registerRosettaTools(
 
   server.tool(
     "rosetta_status",
-    "[business] Mina-Rosetta /network/status — current/genesis/oldest block identifiers and sync state for this network, in standardized Rosetta format.",
+    "Mina-Rosetta /network/status — current/genesis/oldest block identifiers and sync state for this network, in standardized Rosetta format.",
     {},
     async () => {
       const rosetta = rosettaOf(getProvider());
@@ -55,7 +55,7 @@ export function registerRosettaTools(
 
   server.tool(
     "rosetta_account",
-    "[business] Mina-Rosetta /account/balance — balance(s) for a B62q… account, optionally at a specific block.",
+    "Mina-Rosetta /account/balance — balance(s) for a B62q… account, optionally at a specific block.",
     {
       address: z.string().describe("Mina public key (B62q…)"),
       blockIndex: z.number().optional().describe("Block height (optional). Pass at most one of blockIndex or blockHash."),
@@ -142,7 +142,7 @@ export function registerRosettaTools(
 
   server.tool(
     "rosetta_mempool",
-    "[business] Mina-Rosetta /mempool — pending transaction identifiers on this network.",
+    "Mina-Rosetta /mempool — pending transaction identifiers on this network.",
     {},
     async () => {
       const rosetta = rosettaOf(getProvider());
@@ -156,7 +156,7 @@ export function registerRosettaTools(
 
   server.tool(
     "rosetta_mempool_transaction",
-    "[business] Mina-Rosetta /mempool/transaction — a single pending transaction with operations, by hash.",
+    "Mina-Rosetta /mempool/transaction — a single pending transaction with operations, by hash.",
     {
       hash: z.string().describe("Transaction hash (returned by rosetta_mempool)"),
     },

@@ -12,7 +12,7 @@ export function registerZkAppTools(
 
   server.tool(
     "get_events",
-    "[business] Get emitted events from a zkApp address. Uses the Archive-Node-API. Events are state-change notifications emitted by zkApp account updates.",
+    "Get emitted events from a zkApp address. Uses the Archive-Node-API. Events are state-change notifications emitted by zkApp account updates.",
     {
       address: z.string().describe("zkApp public key (B62...)"),
       tokenId: z.string().optional().describe("Token ID (defaults to MINA token)"),
@@ -36,7 +36,7 @@ export function registerZkAppTools(
 
   server.tool(
     "get_actions",
-    "[business] Get dispatched actions from a zkApp address. Uses the Archive-Node-API. Actions are reducer inputs that modify zkApp state.",
+    "Get dispatched actions from a zkApp address. Uses the Archive-Node-API. Actions are reducer inputs that modify zkApp state.",
     {
       address: z.string().describe("zkApp public key (B62...)"),
       tokenId: z.string().optional().describe("Token ID"),
@@ -62,7 +62,7 @@ export function registerZkAppTools(
 
   server.tool(
     "get_archive_blocks",
-    "[business] Get blocks from the Archive-Node-API. Includes block height, creator, timestamp, and coinbase reward.",
+    "Get blocks from the Archive-Node-API. Includes block height, creator, timestamp, and coinbase reward.",
     {
       canonical: z.boolean().optional().describe("Only return canonical (finalized) blocks"),
       sortBy: z.enum(["BLOCKHEIGHT_ASC", "BLOCKHEIGHT_DESC"]).default("BLOCKHEIGHT_DESC").describe("Sort order"),
@@ -89,7 +89,7 @@ export function registerZkAppTools(
 
   server.tool(
     "get_network_state",
-    "[business] Get network state from the Archive-Node-API. Returns max canonical and pending block heights.",
+    "Get network state from the Archive-Node-API. Returns max canonical and pending block heights.",
     {},
     async () => {
       const provider = getProvider();

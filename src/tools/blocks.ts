@@ -87,7 +87,7 @@ export function registerBlockTools(
   if (mode === "tutorial") {
     server.tool(
       "list_blocks",
-      "[business] List blocks from the archive database, ordered by height descending.",
+      "List blocks from the archive database, ordered by height descending.",
       {
         limit: z.number().min(1).max(100).default(20).describe("Number of blocks to return (max 100)"),
         offset: z.number().min(0).default(0).describe("Offset for pagination"),
