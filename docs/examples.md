@@ -1,63 +1,97 @@
 # Prompt cookbook
 
-Things you can ask an AI assistant once the Mina MCP server is connected. These
-are natural-language prompts — the model picks the right tools. Each entry notes
-the tools involved and the mode it needs.
+Worked examples you can paste into an MCP client once the Mina server is
+connected. Each entry lists the **goal**, the **mode** it needs, a
+copy-paste **prompt**, the **tool sequence** the model should run, and the
+**expected result**. They double as a regression corpus for the
+LLM-friendliness work (#27).
 
-The server also ships these as a runnable, machine-readable library: call
-`list_examples` to see what's available in the current mode, and `get_example`
-to fetch the exact tool steps for one.
+The server also ships these as a machine-readable library: `list_examples`
+shows what's runnable in the current mode, and `get_example` returns the exact
+tool steps for one.
 
-> **Tip:** in any new session, start with *"Describe the current state"* —
-> it calls `describe_state`, which orients the model (sync status, mempool,
-> mode, network) and returns `hints[]` that steer follow-up calls.
+> In any new session, start with **"Describe the current state"** —
+> `describe_state` orients the model (sync status, network, mempool, mode) and
+> returns `hints[]` that steer the follow-up calls.
 
-## Live mode (public networks — no infra)
+---
 
-Run `npx @o1-labs/mina-mcp-server --mode live --network devnet`, or use the
-hosted sandbox.
+## 1. Devnet payment: dry-run → commit → poll
 
-| Ask | Tools | Notes |
-|---|---|---|
-| "What's the balance and nonce of `B62q…`?" | `get_account` | Works on devnet/mainnet/mesa. |
-| "Show me the top of the canonical chain." | `get_best_chain` | |
-| "Get block at height 12345 / state hash `3N…`." | `get_block` | Exactly one of height or hash. |
-| "Is the network synced? What's in the mempool?" | `get_sync_status`, `get_mempool` | |
-| "List the last 5 canonical archive blocks, then open one." | `get_archive_blocks`, `get_block` | |
-| "Show events / actions for zkApp `B62q…`." | `get_events`, `get_actions` | Archive-Node-API. |
-| "Give me the Rosetta network status / block / account balance." | `rosetta_status`, `rosetta_block`, `rosetta_account` | Standardized Rosetta format. |
-| "What pending tx is `Ckp5…`?" | `rosetta_mempool`, `rosetta_mempool_transaction` | |
+- **Goal:** send MINA on a public network, but inspect the signed transaction before it goes out.
+- **Mode:** `live` + `--wallets` (live-write).
+- **Prompt:** *"Using my `warm` wallet, do a dry run of sending 1 MINA to `B62q…`. If it looks right, submit it and then poll until it's included."*
+- **Tools:** `list_wallets` → `send_payment` (`dry_run: true`) → `send_payment` → `get_transaction_status`
+- **Expected:** a signed payload (sender, amount, fee, nonce) from the dry run; then a tx id/hash on submit; then `get_transaction_status` transitions `PENDING` → `INCLUDED`. A fee/amount above a wallet cap is refused *before* signing.
 
-## Tutorial mode (local lightnet — read + write)
+## 2. Tutorial faucet lifecycle
 
-Run `--mode tutorial` with the lightnet up (see [Prerequisites](../README.md#prerequisites)).
+- **Goal:** end-to-end payment between two throwaway funded accounts.
+- **Mode:** `tutorial`.
+- **Prompt:** *"Grab two test accounts, send 1 MINA from the first to the second, confirm it's included, then release everything."*
+- **Tools:** `faucet` → `faucet` → `send_payment` → `get_transaction_status` → `reset_session`
+- **Expected:** two `B62q…` accounts (1550 MINA each); a payment id; status reaching `INCLUDED` (~one lightnet block); `reset_session` releases the acquired accounts.
 
-| Ask | Tools | Notes |
-|---|---|---|
-| "Send 1 MINA from a fresh test account to another and confirm it." | `faucet`, `send_payment`, `get_transaction_status` | Faucet gives 1550-MINA accounts. |
-| "Submit a payment and show it in the mempool before it's mined." | `faucet`, `send_payment`, `get_mempool` | Run mempool read immediately. |
-| "Send a payment, wait for inclusion, verify it in the archive DB." | `send_payment`, `get_transaction_status`, `query_archive_sql` | |
-| "Delegate a faucet account's stake to `B62q…`." | `faucet`, `send_delegation` | |
-| "Pause the periodic chain reset for an hour for a demo." | `freeze_reset`, `freeze_status`, `unfreeze_reset` | |
-| "Release every test account this session is holding." | `reset_session` | Idempotent. |
+## 3. Multi-wallet orientation
 
-## Live-write mode (experimental — your keys, in-process signing)
+- **Goal:** see every loaded wallet's balance and nonce at a glance.
+- **Mode:** `live` + `--wallets` (live-write).
+- **Prompt:** *"Describe the state, then list my wallets with their balances and nonces."*
+- **Tools:** `describe_state` → `list_wallets`
+- **Expected:** the network snapshot, then one row per wallet (alias, publicKey, balance, nonce). **Private keys never appear.**
 
-Run `--mode live --network devnet --wallets ./wallets.json`. **Read the
-live-write safety warnings first** ([README](../README.md), [SECURITY.md](../SECURITY.md)).
+## 4. GraphQL vs Rosetta cross-validation
 
-| Ask | Tools | Notes |
-|---|---|---|
-| "List my loaded wallets with balances." | `list_wallets` | Never returns private keys. |
-| "Send 2 MINA from my `warm` wallet to `B62q…`." | `send_payment` | Signed locally with `mina-signer`. |
+- **Goal:** confirm the native and Rosetta views of the same data agree.
+- **Mode:** `live`.
+- **Prompt:** *"Look up account `B62q…` two ways — the native `get_account` and the Rosetta `rosetta_account` — and tell me whether the balances match."*
+- **Tools:** `get_account` + `rosetta_account` (optionally `get_block` + `rosetta_block` for a block).
+- **Expected:** both report the same balance (native in a `balance.total` field, Rosetta in `balances[].value`); the model reconciles units (nanomina) and reports agreement.
 
-## Snapshot mode (frozen archive — analytics)
+## 5. Archive top accounts (SQL)
 
-Run `--mode snapshot` against a Postgres archive dump. Schema-only: SQL +
-connectivity.
+- **Goal:** ad-hoc analytics over historical chain data.
+- **Mode:** `snapshot` (or `tutorial`).
+- **Prompt:** *"Show me the archive schema, then the 10 accounts that received the most distinct payments."*
+- **Tools:** `get_archive_schema` → `query_archive_sql`
+- **Expected:** the table/column listing, then a 10-row result. Queries run with a read-only role and a statement timeout — writes or runaway scans are rejected.
 
-| Ask | Tools | Notes |
-|---|---|---|
-| "What tables are in the archive?" | `get_archive_schema` | |
-| "Count blocks by chain status." | `query_archive_sql` | Read-only role + statement timeout. |
-| "How many user commands per day last week?" | `query_archive_sql` | Bring your own SQL. |
+## 6. zkApp event / action walk-through
+
+- **Goal:** inspect a deployed zkApp's on-chain activity.
+- **Mode:** `live` (public Archive-Node-API) or `tutorial`.
+- **Prompt:** *"For zkApp `B62q…`, show its recent canonical events and actions and summarize what changed."*
+- **Tools:** `get_events` → `get_actions`
+- **Expected:** events/actions grouped by block, each with the emitting transaction; an empty list if the zkApp has no canonical activity yet (not an error).
+
+## 7. Multi-network sync sanity check
+
+- **Goal:** confirm the public endpoints are healthy across networks.
+- **Mode:** `live` (run once per network, or use the hosted sandbox + local instances).
+- **Prompt:** *"Is this network synced, and what's the current block height?"* (repeat on devnet, mainnet, mesa).
+- **Tools:** `describe_state` (or `get_sync_status` + `get_network_state`).
+- **Expected:** `SYNCED` with a plausible height on devnet/mainnet; on `mesa` the first hint is a `PREFLIGHT` warning and data should be treated as ephemeral.
+
+## 8. Mempool watch grouped by source
+
+- **Goal:** see what's pending right now, by sender.
+- **Mode:** `tutorial` or `live`.
+- **Prompt:** *"List the pending mempool transactions and group them by sender account."*
+- **Tools:** `get_mempool`
+- **Expected:** pending commands with from/to/amount/fee/nonce, grouped by `from`; an empty list once everything is mined (mempool shows only un-included txs).
+
+## 9. Funding handoff flow
+
+- **Goal:** fund a fresh account from a faucet account, then verify.
+- **Mode:** `tutorial`.
+- **Prompt:** *"Acquire a funded account and a new empty one, move 5 MINA over, wait for inclusion, then show the new account's balance."*
+- **Tools:** `faucet` → `faucet` → `send_payment` → `get_transaction_status` → `get_account` → `return_account`
+- **Expected:** the receiver's balance reflects the transfer after inclusion; `return_account` (or `reset_session`) releases the funded source.
+
+## 10. Pre-deploy smoke across live networks
+
+- **Goal:** one-shot health/readiness check before pointing automation at a network.
+- **Mode:** `live`.
+- **Prompt:** *"Run a quick smoke check: sync status, latest block, and genesis constants. Flag anything unexpected."*
+- **Tools:** `describe_state` → `get_best_chain` (lite) → `get_genesis_constants`
+- **Expected:** synced status, a short chain of recent block headers (use `get_block` with `detail` for transactions), and the network's fee/timing constants — enough to green-light or abort.
