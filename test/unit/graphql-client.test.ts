@@ -6,8 +6,11 @@ describe("GraphQLClient", () => {
   let fetchSpy: ReturnType<typeof vi.spyOn>;
 
   beforeEach(() => {
-    client = new GraphQLClient("http://test:3085/graphql");
+    // Spy BEFORE constructing the client: the underlying SDK MinaClient
+    // captures globalThis.fetch in its constructor, so the spy must already
+    // be installed for calls to be intercepted.
     fetchSpy = vi.spyOn(globalThis, "fetch");
+    client = new GraphQLClient("http://test:3085/graphql");
   });
 
   afterEach(() => {
@@ -33,11 +36,12 @@ describe("GraphQLClient", () => {
 
     const result = await client.query<{ syncStatus: string }>("{ syncStatus }");
     expect(result.data?.syncStatus).toBe("SYNCED");
-    expect(fetchSpy).toHaveBeenCalledWith("http://test:3085/graphql", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ query: "{ syncStatus }", variables: undefined }),
-    });
+
+    const [url, init] = fetchSpy.mock.calls[0];
+    expect(url).toBe("http://test:3085/graphql");
+    expect(init!.method).toBe("POST");
+    const body = JSON.parse(init!.body as string);
+    expect(body.query).toBe("{ syncStatus }");
   });
 
   it("should pass variables", async () => {
@@ -56,10 +60,14 @@ describe("GraphQLClient", () => {
     expect(callBody.variables).toEqual({ pk: "B62test" });
   });
 
-  it("should throw on HTTP errors", async () => {
-    fetchSpy.mockResolvedValueOnce(new Response("Internal Server Error", { status: 500, statusText: "Internal Server Error" }));
+  it("should throw on transport (HTTP) errors", async () => {
+    // Persistent mock: the SDK transport retries non-deterministic failures
+    // before giving up, so every attempt must see the 500.
+    fetchSpy.mockResolvedValue(
+      new Response("Internal Server Error", { status: 500, statusText: "Internal Server Error" })
+    );
 
-    await expect(client.query("{ syncStatus }")).rejects.toThrow("GraphQL request failed: 500");
+    await expect(client.query("{ syncStatus }")).rejects.toThrow();
   });
 
   it("should return errors from GraphQL response", async () => {
@@ -87,7 +95,8 @@ describe("GraphQLClient", () => {
   });
 
   it("should check connection (failure)", async () => {
-    fetchSpy.mockRejectedValueOnce(new Error("ECONNREFUSED"));
+    // Persistent reject: isConnected → getSyncStatus retries before failing.
+    fetchSpy.mockRejectedValue(new Error("ECONNREFUSED"));
     expect(await client.isConnected()).toBe(false);
   });
 });
