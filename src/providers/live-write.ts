@@ -4,6 +4,28 @@ import { NetworkConfig } from "../networks.js";
 import { LoadedWallet, WalletRegistry } from "../wallets/types.js";
 import { QUERIES } from "../graphql/queries.js";
 
+// Mina transaction memos are capped at 32 bytes on-chain. Enforce it before
+// signing so an over-long memo fails fast with a clear error rather than
+// being silently truncated or rejected by the daemon after we've signed.
+const MAX_MEMO_BYTES = 32;
+
+// Guardrail violation — surfaced to the LLM so it can react, never silently
+// swallowed. Carries no key material.
+export class SpendLimitError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "SpendLimitError";
+  }
+}
+
+// Compare two non-negative decimal nanomina strings: is value > cap?
+// Defensive: if either isn't a clean integer string, don't block here — the
+// signer + daemon validate amounts; caps are a guardrail, not the validator.
+function exceeds(value: string, cap: string): boolean {
+  if (!/^\d+$/.test(value) || !/^\d+$/.test(cap)) return false;
+  return BigInt(value) > BigInt(cap);
+}
+
 // LiveProvider that holds plaintext private keys for one or more wallets
 // and can sign+submit payments / delegations against the configured public
 // daemon. Only constructed when the caller passes a wallets config (see
@@ -138,6 +160,38 @@ export class LiveWriteProvider extends LiveProvider {
     return Math.max(daemonNonce, cached + 1);
   }
 
+  // Enforce memo size + per-wallet spend caps BEFORE we sign anything. A
+  // capped or oversized transaction must never get a signature. (#26)
+  private enforceLimits(
+    wallet: LoadedWallet,
+    tx: { amount?: string; fee: string; memo?: string }
+  ): void {
+    const memoBytes = Buffer.byteLength(tx.memo ?? "", "utf8");
+    if (memoBytes > MAX_MEMO_BYTES) {
+      throw new SpendLimitError(
+        `memo is ${memoBytes} bytes; Mina memos are capped at ${MAX_MEMO_BYTES} bytes.`
+      );
+    }
+    const caps = wallet.caps;
+    if (!caps) return;
+    if (caps.maxFeeNanomina !== undefined && exceeds(tx.fee, caps.maxFeeNanomina)) {
+      throw new SpendLimitError(
+        `fee ${tx.fee} exceeds wallet '${wallet.alias}' cap maxFeeNanomina=${caps.maxFeeNanomina}. ` +
+          `Lower the fee or raise the cap in wallets.json.`
+      );
+    }
+    if (
+      tx.amount !== undefined &&
+      caps.maxAmountNanomina !== undefined &&
+      exceeds(tx.amount, caps.maxAmountNanomina)
+    ) {
+      throw new SpendLimitError(
+        `amount ${tx.amount} exceeds wallet '${wallet.alias}' cap maxAmountNanomina=${caps.maxAmountNanomina}. ` +
+          `Lower the amount or raise the cap in wallets.json.`
+      );
+    }
+  }
+
   // Build, sign, optionally submit. dryRun returns the signed payload + hash
   // without hitting the daemon, useful for "show me what you'd do".
   async sendSignedPayment(opts: {
@@ -145,6 +199,11 @@ export class LiveWriteProvider extends LiveProvider {
     payment: BuildPaymentInput;
     dryRun: boolean;
   }): Promise<Record<string, unknown>> {
+    this.enforceLimits(opts.wallet, {
+      amount: opts.payment.amount,
+      fee: opts.payment.fee,
+      memo: opts.payment.memo,
+    });
     const nonce = await this.resolveNonce(opts.wallet);
     const payload = {
       from: opts.wallet.publicKey,
@@ -198,6 +257,10 @@ export class LiveWriteProvider extends LiveProvider {
     delegation: BuildDelegationInput;
     dryRun: boolean;
   }): Promise<Record<string, unknown>> {
+    this.enforceLimits(opts.wallet, {
+      fee: opts.delegation.fee,
+      memo: opts.delegation.memo,
+    });
     const nonce = await this.resolveNonce(opts.wallet);
     // mina-signer exposes signStakeDelegation with the same call shape.
     const payload = {

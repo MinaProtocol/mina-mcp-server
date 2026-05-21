@@ -145,7 +145,11 @@ describe("MCP Server - Live Write Mode", () => {
       expect(list.map((w) => w.alias).sort()).toEqual(["demo", "warm"]);
       // Belt-and-braces: no privateKey field anywhere.
       expect(text).not.toContain("privateKey");
-      expect(text).not.toMatch(/EK[A-Za-z0-9]{20,}/);
+      // Precise: the actual loaded private keys must never appear. A generic
+      // /EK\w+/ regex false-positives on base58 publicKeys that happen to
+      // contain "EK", which made this assertion flaky (#26).
+      expect(text).not.toContain(ctx.walletA.privateKey);
+      expect(text).not.toContain(ctx.walletB.privateKey);
     });
   });
 
@@ -325,7 +329,11 @@ describe("MCP Server - Live Write Mode", () => {
       expect(snap.hints.some((h: string) => h.includes("Live-WRITE"))).toBe(true);
       // Redaction.
       expect(text).not.toContain("privateKey");
-      expect(text).not.toMatch(/EK[A-Za-z0-9]{20,}/);
+      // Precise: the actual loaded private keys must never appear. A generic
+      // /EK\w+/ regex false-positives on base58 publicKeys that happen to
+      // contain "EK", which made this assertion flaky (#26).
+      expect(text).not.toContain(ctx.walletA.privateKey);
+      expect(text).not.toContain(ctx.walletB.privateKey);
     });
   });
 });
