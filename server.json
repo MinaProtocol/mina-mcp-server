@@ -1,0 +1,25 @@
+{
+  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-07-09/server.schema.json",
+  "name": "io.github.minaprotocol/mina-mcp-server",
+  "description": "Query Mina Protocol from any AI assistant: accounts, blocks, transactions, zkApp events/actions, archive SQL, and Rosetta — over the daemon, archive node, and Rosetta endpoints.",
+  "version": "0.5.0",
+  "repository": {
+    "url": "https://github.com/MinaProtocol/mina-mcp-server",
+    "source": "github"
+  },
+  "packages": [
+    {
+      "registry_type": "npm",
+      "identifier": "@o1-labs/mina-mcp-server",
+      "version": "0.5.0",
+      "transport": {
+        "type": "stdio"
+      },
+      "runtime_hint": "npx",
+      "package_arguments": [
+        { "type": "named", "name": "--mode", "value": "live", "description": "Operating mode: live | tutorial | snapshot" },
+        { "type": "named", "name": "--network", "value": "devnet", "description": "Public network for live mode: devnet | mainnet | mesa" }
+      ]
+    }
+  ]
+}
