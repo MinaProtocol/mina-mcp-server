@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 
+import { readFileSync } from "node:fs";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import MinaSigner from "mina-signer";
 import { ArchiveDB } from "./db/archive.js";
@@ -20,6 +21,47 @@ import { WalletRegistry } from "./wallets/types.js";
 
 type Transport = "stdio" | "http";
 
+// Resolved from package.json at the package root (../ from dist/index.js).
+const VERSION: string = (() => {
+  try {
+    return JSON.parse(readFileSync(new URL("../package.json", import.meta.url), "utf8")).version;
+  } catch {
+    return "unknown";
+  }
+})();
+
+const HELP_TEXT = `mina-mcp-server v${VERSION}
+MCP server for Mina Protocol — accounts, blocks, transactions, zkApp events,
+archive SQL, and Rosetta, over the daemon / archive node / Rosetta endpoints.
+
+USAGE
+  mina-mcp-server [--mode <mode>] [options]
+
+MODES
+  live        Read-only proxy to a public network. No local infra. (use --network)
+  tutorial    Read+write against a local Mina lightnet (daemon + archive + faucet).
+  snapshot    Schema-only SQL access against a frozen archive Postgres dump. (default)
+
+OPTIONS
+  --mode <live|tutorial|snapshot>   Operating mode (default: snapshot).
+  --network <devnet|mainnet|mesa>   Public network (live mode only).
+  --transport <stdio|http>          MCP transport (default: stdio).
+  --wallets <path>                  wallets.json for live-write mode (live only).
+  --allow-mainnet-writes            Required opt-in to submit on mainnet.
+  -h, --help                        Show this help and exit.
+  -v, --version                     Print the version and exit.
+
+ENVIRONMENT (equivalent to the flags above)
+  MINA_MCP_MODE, MINA_MCP_NETWORK, MINA_MCP_TRANSPORT, MINA_MCP_WALLETS,
+  MINA_MCP_ALLOW_MAINNET_WRITES=1, MINA_MCP_HTTP_PORT (http transport, default 3000).
+
+EXAMPLES
+  mina-mcp-server --mode live --network devnet
+  mina-mcp-server --mode tutorial
+  MINA_MCP_MODE=snapshot mina-mcp-server
+
+Docs: https://github.com/MinaProtocol/mina-mcp-server`;
+
 interface ParsedArgs {
   mode: Mode;
   transport: Transport;
@@ -31,6 +73,18 @@ interface ParsedArgs {
 
 function parseArgs(): ParsedArgs {
   const args = process.argv.slice(2);
+
+  // Handled before anything else, and before any MCP transport is created, so
+  // writing to stdout here is safe (no protocol stream yet).
+  if (args.includes("--help") || args.includes("-h")) {
+    console.log(HELP_TEXT);
+    process.exit(0);
+  }
+  if (args.includes("--version") || args.includes("-v")) {
+    console.log(VERSION);
+    process.exit(0);
+  }
+
   let mode: Mode = "snapshot";
   let transport: Transport = "stdio";
   let network: NetworkName | undefined;

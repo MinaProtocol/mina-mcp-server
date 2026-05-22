@@ -1,0 +1,36 @@
+# Smithery (smithery.ai) listing config. Smithery reads this from the repo to
+# describe how to start the server. mina-mcp-server runs locally over stdio via
+# npx — there's no infra to host for `live` mode.
+#
+# Docs: https://smithery.ai/docs
+startCommand:
+  type: stdio
+  configSchema:
+    type: object
+    properties:
+      mode:
+        type: string
+        enum: [live, tutorial, snapshot]
+        default: live
+        description: >-
+          Operating mode. 'live' talks to a public network with no local infra.
+          'tutorial'/'snapshot' need backing services you run yourself.
+      network:
+        type: string
+        enum: [devnet, mainnet, mesa]
+        default: devnet
+        description: Public network (live mode only).
+    required: []
+  # Returns the command Smithery should run for a given user config.
+  commandFunction: |
+    (config) => ({
+      command: 'npx',
+      args: [
+        '-y',
+        '@o1-labs/mina-mcp-server',
+        '--mode', config.mode || 'live',
+        ...(((config.mode || 'live') === 'live') && config.network
+          ? ['--network', config.network]
+          : [])
+      ]
+    })
