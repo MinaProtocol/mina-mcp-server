@@ -16,7 +16,9 @@ it are summarized from the git history.
 - `LICENSE` file (Apache-2.0), `SECURITY.md`, `CONTRIBUTING.md`,
   `CODE_OF_CONDUCT.md`, issue/PR templates, and a prompt cookbook
   (`docs/examples.md`).
-- `server.json` manifest for the official MCP registry.
+- `server.json` manifest for the official MCP registry, a `mcpName` field in
+  `package.json` (links the npm package to the registry entry), and a
+  `smithery.yaml` for Smithery listing.
 - `--help` and `--version` CLI flags.
 - README distribution rework: a "which mode?" decision flow, a multi-client
   config matrix (Claude Desktop/Code, Cursor, Cline, Windsurf, Continue, Zed),
