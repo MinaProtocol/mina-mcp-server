@@ -208,8 +208,9 @@ export function registerTransactionTools(
     server.tool(
       "get_mempool",
       "List transactions currently pending in the daemon's mempool (not yet in a block), " +
-        "optionally filtered by `publicKey`. Returns sender/receiver/amount/fee/nonce per " +
-        "command. Empty once everything has been included — it does not show mined txs.",
+        "optionally filtered by `publicKey`. Each entry has top-level `from`/`to` (B62q… " +
+        "pubkeys) plus `amount`/`fee`/`nonce`/`hash`/`kind`/`memo`/`failureReason`. " +
+        "Empty once everything has been included — does not show mined txs.",
       {
         publicKey: z.string().optional().describe("Filter by public key"),
       },

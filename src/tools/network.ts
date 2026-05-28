@@ -9,7 +9,7 @@ export function registerNetworkTools(
 ) {
   server.tool(
     "get_sync_status",
-    "[infra] Get the sync status and daemon info. In snapshot mode returns archive DB stats. In tutorial and live modes returns live daemon status.",
+    "[infra] Get the sync status and daemon info. Returns the flat daemon status object directly — fields like `syncStatus`, `blockchainLength`, `stateHash`, `numAccounts`, `chainId`, `addrsAndPorts` are at the top level (not nested under `daemonStatus`). In snapshot mode returns archive DB stats instead. In tutorial and live modes returns the live daemon status.",
     {},
     async () => {
       const provider = getProvider();
@@ -88,7 +88,7 @@ export function registerNetworkTools(
   if (mode === "tutorial") {
     server.tool(
       "get_archive_stats",
-      "[infra] Get statistics from the archive database: total blocks, commands, accounts, etc.",
+      "[infra][tutorial] Statistics from the local archive database: total blocks, commands, accounts, etc. Tutorial mode only — live/snapshot don't have an archive DB.",
       {},
       async () => {
         const provider = getProvider();

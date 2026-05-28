@@ -87,7 +87,9 @@ export function registerBlockTools(
   if (mode === "tutorial") {
     server.tool(
       "list_blocks",
-      "List blocks from the archive database, ordered by height descending.",
+      "[tutorial] Archive-DB-backed list of blocks ordered by height descending. " +
+        "Tutorial mode only (live mode has no archive DB — use `get_archive_blocks` against the " +
+        "Archive-Node-API instead). Prefer `get_best_chain` for the daemon's in-memory tip view.",
       {
         limit: z.number().min(1).max(100).default(20).describe("Number of blocks to return (max 100)"),
         offset: z.number().min(0).default(0).describe("Offset for pagination"),
