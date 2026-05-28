@@ -8,6 +8,8 @@ const LIVE_RUNNABLE = new Set<string>([
   "look_up_account_live",
   "explore_zkapp_events_live",
   "browse_archive_blocks",
+  "live_write_payment",
+  "rosetta_browse",
 ]);
 
 export interface ExampleStep {
@@ -213,6 +215,60 @@ export const EXAMPLES: Example[] = [
     mode: "tutorial",
     steps: [
       { tool: "reset_session", note: "Idempotent — safe to call when the session holds nothing." },
+    ],
+  },
+  {
+    name: "live_write_payment",
+    summary: "Send a signed payment in live-write mode (server-loaded wallet keys; signs locally, submits to a public network).",
+    mode: "live",
+    steps: [
+      {
+        tool: "list_wallets",
+        note: "Pick an alias and confirm the balance covers amount + fee. The response never includes private keys.",
+      },
+      {
+        tool: "send_payment",
+        args: {
+          from_alias: "warm",
+          to: "B62q...",
+          amount: "1000000000",
+          fee: "100000000",
+          dry_run: true,
+        },
+        note: "ALWAYS dry-run first: returns signedPayload (data, signature, publicKey) without submitting. Confirms nonce + signature shape look right.",
+      },
+      {
+        tool: "send_payment",
+        args: { from_alias: "warm", to: "B62q...", amount: "1000000000", fee: "100000000" },
+        bind: { hash: "$tx_hash", id: "$tx_id" },
+        note: "Real submit. Returns the flat SubmittedCommand (hash, id, nonce, kind, source, receiver, amount, fee, memo). Per-wallet spend caps + memo size are enforced before signing.",
+      },
+      {
+        tool: "get_transaction_status",
+        args: { payment: "$tx_id" },
+        note: "PENDING → INCLUDED on a typical devnet block (~3 min). UNKNOWN means the daemon doesn't have it.",
+      },
+    ],
+  },
+  {
+    name: "rosetta_browse",
+    summary: "Walk a public network through the Rosetta Data API: chain status → latest block → mempool.",
+    mode: "live",
+    steps: [
+      {
+        tool: "rosetta_status",
+        note: "Confirms the Rosetta endpoint is reachable and reports the current block.",
+        bind: { "current_block_identifier.index": "$block_index" },
+      },
+      {
+        tool: "rosetta_block",
+        args: { block_identifier: { index: "$block_index" }, detail: "lite" },
+        note: "lite returns header + transaction counts. Use `transactions` for paged tx details, `full` to bypass shaping (may overflow).",
+      },
+      {
+        tool: "rosetta_mempool",
+        note: "Pending transaction identifiers. Pick one and call rosetta_mempool_transaction for its operations.",
+      },
     ],
   },
 ];

@@ -1,4 +1,4 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi } from "vitest";
 import { promises as fs, chmodSync } from "node:fs";
 import path from "node:path";
 import os from "node:os";
@@ -145,6 +145,65 @@ describe("MCP Server - private-key redaction sweep", () => {
           `${tool.name} response leaked the server's loaded private key`
         ).not.toContain(loadedKey);
       }
+
+      // Extra coverage beyond the "every tool with bogus args" sweep:
+      //
+      // 1) send_payment with dry_run=true is a *success* path that returns
+      //    `signedPayload.data/signature/publicKey` — none of which should
+      //    contain the loaded EK private key. Mock getAccount to return a
+      //    valid nonce so we exercise the full sign path.
+      const mockClient = (provider as unknown as {
+        client: { getAccount: ReturnType<typeof vi.fn> };
+      }).client;
+      mockClient.getAccount.mockResolvedValueOnce({ nonce: 0, balance: { total: "1000000000000" } });
+      const dryRunResp = (await client.callTool({
+        name: "send_payment",
+        arguments: { from_alias: "warm", to: k.publicKey, amount: "1", fee: "1", dry_run: true },
+      })) as { content: Array<{ type: string; text: string }> };
+      const dryRunSer = JSON.stringify(dryRunResp);
+      expect(dryRunSer, "send_payment dry_run response leaked the loaded private key").not.toContain(loadedKey);
+      expect(dryRunSer, "send_payment dry_run response leaked any EK private key").not.toMatch(/EK[1-9A-HJ-NP-Za-km-z]{40,}/);
+
+      // 2) SpendLimitError path. Configure a cap below what we ask, force the
+      //    "Payment failed" route (with the cap-violation error message), and
+      //    assert the response doesn't echo the key.
+      //
+      //    The wallets we loaded don't have caps configured; instead force a
+      //    different error path: pass an enormous fee that's still legal
+      //    syntactically but the daemon-side mock will reject. The
+      //    "Payment failed: ..." branch in transactions.ts is what we care
+      //    about — confirm the error message it formats is key-free.
+      mockClient.getAccount.mockResolvedValueOnce({ nonce: 0, balance: { total: "1000000000000" } });
+      (mockClient as unknown as { executeQuery: ReturnType<typeof vi.fn> }).executeQuery.mockRejectedValueOnce(
+        new Error("Insufficient balance to cover fee + amount")
+      );
+      const failResp = (await client.callTool({
+        name: "send_payment",
+        arguments: { from_alias: "warm", to: k.publicKey, amount: "999999999999999", fee: "1" },
+      })) as { content: Array<{ type: string; text: string }> };
+      const failSer = JSON.stringify(failResp);
+      expect(failSer, "send_payment failure response leaked the loaded private key").not.toContain(loadedKey);
+
+      // 3) Upstream error that *echoes the request body* (a future SDK might
+      //    do this). Mock executeQuery to throw with the entire { input,
+      //    signature } variables stringified in the error message; the
+      //    redaction layer should still keep the key out. Currently the
+      //    `input` never contains the private key — signing happens
+      //    server-side and only `signature` is sent — so this is a
+      //    belt-and-braces regression test against a future signer that
+      //    leaks the key into `input`.
+      mockClient.getAccount.mockResolvedValueOnce({ nonce: 0, balance: { total: "1000000000000" } });
+      (mockClient as unknown as { executeQuery: ReturnType<typeof vi.fn> }).executeQuery.mockImplementationOnce(
+        async (_q: string, vars: unknown) => {
+          throw new Error(`GraphQL rejected request: ${JSON.stringify(vars)}`);
+        }
+      );
+      const echoResp = (await client.callTool({
+        name: "send_payment",
+        arguments: { from_alias: "warm", to: k.publicKey, amount: "1", fee: "1" },
+      })) as { content: Array<{ type: string; text: string }> };
+      const echoSer = JSON.stringify(echoResp);
+      expect(echoSer, "send_payment upstream-echo failure leaked the loaded private key").not.toContain(loadedKey);
     } finally {
       if (client) await client.close();
       if (server) await server.close();

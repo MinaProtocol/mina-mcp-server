@@ -1,4 +1,4 @@
-import { promises as fs, statSync } from "node:fs";
+import { promises as fs, lstatSync, openSync, readFileSync, closeSync, constants as fsc } from "node:fs";
 import path from "node:path";
 import MinaSigner from "mina-signer";
 import { LoadedWallet, RawWalletEntry, WalletCaps, WalletRegistry, WalletsConfig } from "./types.js";
@@ -142,25 +142,62 @@ async function loadOne(
     ? entry.keyPath
     : path.resolve(path.dirname(configPath), entry.keyPath);
 
-  // Permission gate. We use statSync rather than fs.promises.stat so the
-  // error path is synchronous and easy to reason about.
-  let mode: number;
+  // Permission + ownership + no-symlink gate. lstatSync (not statSync) so a
+  // symlink is rejected outright rather than letting an attacker swap it
+  // under us between stat and open. Also verify file is owned by the same
+  // uid that's running the server — refuses someone else's 0600 key file.
+  // Then open with O_NOFOLLOW to close the TOCTOU window between the lstat
+  // and the read.
+  let stat: ReturnType<typeof lstatSync>;
   try {
-    mode = statSync(absKey).mode;
+    stat = lstatSync(absKey);
   } catch (e) {
     throw new WalletLoadError(
       `Wallet '${alias}': key file '${absKey}' is not readable: ${(e as Error).message}`
     );
   }
-  if ((mode & FORBIDDEN_PERM_BITS) !== 0) {
-    const got = (mode & 0o777).toString(8).padStart(3, "0");
+  if (stat.isSymbolicLink()) {
+    throw new WalletLoadError(
+      `Wallet '${alias}': key file '${absKey}' is a symlink; refuse to follow. ` +
+        `Point keyPath at the real file (or copy it next to wallets.json).`
+    );
+  }
+  if (!stat.isFile()) {
+    throw new WalletLoadError(
+      `Wallet '${alias}': key file '${absKey}' is not a regular file.`
+    );
+  }
+  if ((stat.mode & FORBIDDEN_PERM_BITS) !== 0) {
+    const got = (stat.mode & 0o777).toString(8).padStart(3, "0");
     throw new WalletLoadError(
       `Wallet '${alias}': key file '${absKey}' has permissions ${got}; ` +
         `must be 0600 (chmod 600 the file before retrying).`
     );
   }
+  // process.getuid is undefined on Windows; only enforce when it's available.
+  const ourUid = typeof process.getuid === "function" ? process.getuid() : null;
+  if (ourUid !== null && stat.uid !== ourUid) {
+    throw new WalletLoadError(
+      `Wallet '${alias}': key file '${absKey}' is owned by uid ${stat.uid}, ` +
+        `not by the server's uid ${ourUid}. Refusing to load someone else's key.`
+    );
+  }
 
-  const keyContents = (await fs.readFile(absKey)).toString("utf8").trim();
+  let keyContents: string;
+  try {
+    // O_NOFOLLOW: if the path raced into a symlink after the lstat, this
+    // open fails with ELOOP rather than reading the wrong file.
+    const fd = openSync(absKey, fsc.O_RDONLY | fsc.O_NOFOLLOW);
+    try {
+      keyContents = readFileSync(fd, { encoding: "utf8" }).trim();
+    } finally {
+      closeSync(fd);
+    }
+  } catch (e) {
+    throw new WalletLoadError(
+      `Wallet '${alias}': could not read '${absKey}': ${(e as Error).message}`
+    );
+  }
   if (!keyContents.startsWith("EK")) {
     // We don't log the contents — the prefix check guarantees an "EK…"
     // value would have leaked if we did. Just the alias + path.

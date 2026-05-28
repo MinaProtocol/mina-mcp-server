@@ -356,7 +356,18 @@ async function main() {
   logProviderHealth(provider, mode, db);
 }
 
+// Mina private keys are base58 EK… strings. Anything that resolves to one
+// must never reach a log line — including via a "fatal error" stack trace
+// that happens to interpolate config (e.g. a future contributor adding
+// `throw new Error(\`bad key ${contents}\`)`). Scrub them out of the
+// final-resort logger so a programming error can never become a key leak.
+const EK_KEY_RE = /\bEK[1-9A-HJ-NP-Za-km-z]{40,}\b/g;
+function scrubKeys(s: string): string {
+  return s.replace(EK_KEY_RE, "[REDACTED-PRIVATE-KEY]");
+}
+
 main().catch((err) => {
-  console.error("Fatal error:", err);
+  const text = err instanceof Error && err.stack ? err.stack : String(err);
+  console.error("Fatal error:", scrubKeys(text));
   process.exit(1);
 });
