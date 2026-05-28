@@ -16,7 +16,7 @@
 
 import { execSync } from "node:child_process";
 import { mkdirSync, writeFileSync } from "node:fs";
-import { GraphQLClient } from "../graphql/client.js";
+import { createMinaClient } from "../graphql/client.js";
 
 interface CaptureOptions {
   dbHost: string;
@@ -75,26 +75,19 @@ async function captureMetadata(graphqlEndpoint?: string) {
   };
 
   if (graphqlEndpoint) {
-    const client = new GraphQLClient(graphqlEndpoint);
+    const client = createMinaClient(graphqlEndpoint);
     try {
-      const statusResult = await client.query<{
-        daemonStatus: { blockchainLength: number; stateHash: string; chainId: string };
-      }>("{ daemonStatus { blockchainLength stateHash chainId } }");
-      if (statusResult.data) {
-        metadata.daemonStatus = statusResult.data.daemonStatus;
-      }
+      const status = await client.getDaemonStatus();
+      // Snapshot just needs the small identifying triple — strip the rest
+      // of the now-richer DaemonStatus shape to keep the metadata file lean.
+      metadata.daemonStatus = {
+        blockchainLength: status.blockchainLength,
+        stateHash: status.stateHash,
+        chainId: status.chainId,
+      };
 
-      const genesisResult = await client.query<{
-        genesisConstants: Record<string, unknown>;
-      }>("{ genesisConstants { genesisTimestamp coinbase accountCreationFee } }");
-      if (genesisResult.data) {
-        metadata.genesisConstants = genesisResult.data.genesisConstants;
-      }
-
-      const networkResult = await client.query<{ networkID: string }>("{ networkID }");
-      if (networkResult.data) {
-        metadata.networkID = networkResult.data.networkID;
-      }
+      metadata.genesisConstants = await client.getGenesisConstants();
+      metadata.networkID = await client.getNetworkId();
     } catch (e) {
       console.error(`Warning: Could not fetch live metadata: ${(e as Error).message}`);
       metadata.liveMetadataError = (e as Error).message;

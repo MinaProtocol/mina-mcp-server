@@ -7,7 +7,7 @@ describe("LiveProvider", () => {
     const provider = new LiveProvider(resolveNetwork("devnet"));
     expect(provider.mode).toBe("live");
     expect(provider.network.name).toBe("devnet");
-    expect(provider.graphql.getEndpoint()).toBe(resolveNetwork("devnet").daemonGraphql);
+    expect(provider.getDaemonEndpoint()).toBe(resolveNetwork("devnet").daemonGraphql);
     expect(provider.archiveApi?.graphqlUri).toBe(resolveNetwork("devnet").archiveNodeApi);
   });
 

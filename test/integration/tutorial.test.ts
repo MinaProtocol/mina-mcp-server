@@ -16,7 +16,7 @@ import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { ArchiveDB } from "../../src/db/archive.js";
-import { GraphQLClient } from "../../src/graphql/client.js";
+import { createMinaClient } from "../../src/graphql/client.js";
 import { ArchiveClient } from "@o1-labs/mina-archive-sdk";
 import { AccountsManager } from "../../src/graphql/accounts-manager.js";
 import { TutorialProvider } from "../../src/providers/tutorial.js";
@@ -39,7 +39,7 @@ describe("Tutorial Mode Integration - MCP Tools", () => {
 
   beforeAll(async () => {
     db = new ArchiveDB();
-    const graphql = new GraphQLClient(DAEMON_ENDPOINT);
+    const graphql = createMinaClient(DAEMON_ENDPOINT);
     const archiveApi = new ArchiveClient(ARCHIVE_API_ENDPOINT);
     const accountsManager = new AccountsManager(ACCOUNTS_MANAGER_ENDPOINT);
     const provider = new TutorialProvider(db, graphql, archiveApi, accountsManager);
@@ -76,7 +76,9 @@ describe("Tutorial Mode Integration - MCP Tools", () => {
     const result = await client.callTool({ name: "get_sync_status", arguments: {} });
     const text = (result.content as Array<{ type: string; text: string }>)[0].text;
     const parsed = JSON.parse(text);
-    expect(parsed.daemonStatus.syncStatus).toBe("SYNCED");
+    // SDK's getDaemonStatus returns a flat DaemonStatus (no `{ daemonStatus: ... }`
+    // envelope) since 0.3.0.
+    expect(parsed.syncStatus).toBe("SYNCED");
   });
 
   it("get_genesis_constants should return constants", async () => {
@@ -127,9 +129,10 @@ describe("Tutorial Mode Integration - MCP Tools", () => {
       const text = (result.content as Array<{ type: string; text: string }>)[0].text;
       expect(text).not.toContain("Payment failed");
       const parsed = JSON.parse(text);
-      expect(parsed.payment).toBeDefined();
-      expect(parsed.payment.hash).toBeDefined();
-      paymentId = parsed.payment.id;
+      // SDK's sendPayment returns a flat SubmittedCommand (no `{ payment: ... }`
+      // envelope) since 0.3.0.
+      expect(parsed.hash).toBeDefined();
+      paymentId = parsed.id;
       expect(paymentId).toBeDefined();
     });
 

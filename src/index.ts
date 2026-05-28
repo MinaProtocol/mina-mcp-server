@@ -4,7 +4,7 @@ import { readFileSync } from "node:fs";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import MinaSigner from "mina-signer";
 import { ArchiveDB } from "./db/archive.js";
-import { GraphQLClient } from "./graphql/client.js";
+import { createMinaClient } from "./graphql/client.js";
 import { ArchiveClient } from "@o1-labs/mina-archive-sdk";
 import { AccountsManager } from "./graphql/accounts-manager.js";
 import { SessionTracker } from "./session/tracker.js";
@@ -180,14 +180,14 @@ function logProviderHealth(provider: AnyProvider, mode: Mode, db: ArchiveDB) {
   if (mode === "tutorial") {
     const tp = provider as TutorialProvider;
     void Promise.allSettled([
-      tp.graphql.isConnected(),
+      tp.isDaemonConnected(),
       archiveReachable(tp.archiveApi),
       tp.accountsManager?.isConnected(),
       db.isConnected(),
     ]).then((results) => {
       const status = (r: PromiseSettledResult<unknown>) =>
         r.status === "fulfilled" && r.value ? "connected" : "not reachable";
-      console.error(`  Daemon GraphQL (${tp.graphql.getEndpoint()}): ${status(results[0])}`);
+      console.error(`  Daemon GraphQL (${tp.getDaemonEndpoint()}): ${status(results[0])}`);
       console.error(`  Archive-Node-API (${tp.archiveApi?.graphqlUri}): ${status(results[1])}`);
       console.error(`  Accounts Manager (${tp.accountsManager?.getEndpoint()}): ${status(results[2])}`);
       console.error(`  Archive DB: ${status(results[3])}`);
@@ -195,13 +195,13 @@ function logProviderHealth(provider: AnyProvider, mode: Mode, db: ArchiveDB) {
   } else if (mode === "live") {
     const lp = provider as LiveProvider;
     void Promise.allSettled([
-      lp.graphql.isConnected(),
+      lp.isDaemonConnected(),
       archiveReachable(lp.archiveApi),
     ]).then((results) => {
       const status = (r: PromiseSettledResult<unknown>) =>
         r.status === "fulfilled" && r.value ? "connected" : "not reachable";
       console.error(`  Network: ${lp.network.name}`);
-      console.error(`  Daemon GraphQL (${lp.graphql.getEndpoint()}): ${status(results[0])}`);
+      console.error(`  Daemon GraphQL (${lp.getDaemonEndpoint()}): ${status(results[0])}`);
       console.error(`  Archive-Node-API (${lp.archiveApi?.graphqlUri}): ${status(results[1])}`);
       if (provider instanceof LiveWriteProvider) {
         console.error(
@@ -273,14 +273,14 @@ async function main() {
   let provider: AnyProvider;
 
   if (mode === "tutorial") {
-    const graphql = new GraphQLClient();
+    const client = createMinaClient();
     const archiveApi = new ArchiveClient(
       process.env.ARCHIVE_API_ENDPOINT ?? "http://localhost:8282"
     );
     const accountsManager = new AccountsManager();
     const tracker = new SessionTracker(accountsManager);
     const resetController = new ResetController();
-    provider = new TutorialProvider(db, graphql, archiveApi, accountsManager, tracker, resetController);
+    provider = new TutorialProvider(db, client, archiveApi, accountsManager, tracker, resetController);
   } else if (mode === "live") {
     provider = await buildLiveProvider({ name: network!, walletsPath: wallets });
   } else {

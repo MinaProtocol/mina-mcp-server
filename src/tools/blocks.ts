@@ -60,7 +60,7 @@ export function registerBlockTools(
           const result = await provider.getBlockLive(stateHash, height);
           if (result) {
             return renderShaped(
-              shapeDaemonBlock(result as Record<string, unknown>, opts),
+              shapeDaemonBlock(result as unknown as Record<string, unknown>, opts),
               opts.detail
             );
           }
@@ -125,7 +125,7 @@ export function registerBlockTools(
           transactionOffset: 0,
         };
         return renderShaped(
-          shapeBestChain(result as Record<string, unknown>[], opts),
+          shapeBestChain(result as unknown as Record<string, unknown>[], opts),
           opts.detail
         );
       }

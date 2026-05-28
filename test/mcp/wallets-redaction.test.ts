@@ -7,9 +7,9 @@ import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { LiveWriteProvider } from "../../src/providers/live-write.js";
-import { GraphQLClient } from "../../src/graphql/client.js";
 import { ArchiveClient } from "@o1-labs/mina-archive-sdk";
 import { RosettaClient } from "@o1-labs/mina-rosetta-sdk";
+import { MinaClient } from "@o1-labs/mina-sdk";
 import { resolveNetwork } from "../../src/networks.js";
 import { loadWallets } from "../../src/wallets/loader.js";
 import { registerAccountTools } from "../../src/tools/accounts.js";
@@ -24,7 +24,7 @@ import { registerStateTools } from "../../src/tools/state.js";
 import { registerExampleTools } from "../../src/tools/examples.js";
 import { registerRosettaTools } from "../../src/tools/rosetta.js";
 import { registerWalletTools } from "../../src/tools/wallets.js";
-import { createMockGraphQL, createMockArchiveApi, createMockRosetta } from "./helpers.js";
+import { createMockMinaClient, createMockArchiveApi, createMockRosetta } from "./helpers.js";
 
 // Sweep every registered tool with arguments that will normally produce
 // verbose error responses (bogus addresses, malformed input, etc.) and
@@ -61,7 +61,7 @@ describe("MCP Server - private-key redaction sweep", () => {
       // Mock all upstreams so we never hit the real network and so we can
       // also throw from them (to exercise error paths that mention upstream
       // bodies — those must NOT contain key material either).
-      (provider as unknown as { graphql: GraphQLClient }).graphql = createMockGraphQL();
+      (provider as unknown as { client: MinaClient }).client = createMockMinaClient();
       (provider as unknown as { archiveApi: ArchiveClient }).archiveApi = createMockArchiveApi();
       (provider as unknown as { rosetta: RosettaClient }).rosetta = createMockRosetta();
 

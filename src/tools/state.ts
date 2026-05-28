@@ -152,7 +152,9 @@ export function registerStateTools(
           ],
         };
         if (chainResult.status === "fulfilled") {
-          const status = (chainResult.value as { daemonStatus?: Record<string, unknown> } | null)?.daemonStatus ?? {};
+          // SDK getDaemonStatus returns a typed DaemonStatus directly (no
+          // `{ daemonStatus: … }` envelope from the raw GraphQL shape).
+          const status = (chainResult.value as unknown as Record<string, unknown> | null) ?? {};
           snapshot.chain.syncStatus = status.syncStatus as string | undefined;
           snapshot.chain.blockchainLength = (status.blockchainLength as number | null) ?? null;
           snapshot.chain.stateHash = (status.stateHash as string | null) ?? null;
@@ -184,7 +186,9 @@ export function registerStateTools(
       };
 
       if (chainResult.status === "fulfilled") {
-        const status = (chainResult.value as { daemonStatus?: Record<string, unknown> } | null)?.daemonStatus ?? {};
+        // SDK getDaemonStatus returns a typed DaemonStatus directly (no
+        // `{ daemonStatus: … }` envelope from the raw GraphQL shape).
+        const status = (chainResult.value as unknown as Record<string, unknown> | null) ?? {};
         snapshot.chain.syncStatus = status.syncStatus as string | undefined;
         snapshot.chain.blockchainLength = (status.blockchainLength as number | null) ?? null;
         snapshot.chain.stateHash = (status.stateHash as string | null) ?? null;
