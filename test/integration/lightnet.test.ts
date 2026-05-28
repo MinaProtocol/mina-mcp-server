@@ -94,7 +94,7 @@ describe("Lightnet Integration", () => {
     it("should return daemon status", async () => {
       const result = await gql<{
         daemonStatus: { blockchainLength: number; syncStatus: string };
-      }>("{ daemonStatus { blockchainLength syncStatus } }");
+      }>(graphql, "{ daemonStatus { blockchainLength syncStatus } }");
 
       expect(result.data?.daemonStatus.syncStatus).toBe("SYNCED");
       expect(result.data?.daemonStatus.blockchainLength).toBeGreaterThan(0);
@@ -103,7 +103,7 @@ describe("Lightnet Integration", () => {
     it("should return genesis constants", async () => {
       const result = await gql<{
         genesisConstants: { coinbase: string; accountCreationFee: string };
-      }>("{ genesisConstants { coinbase accountCreationFee } }");
+      }>(graphql, "{ genesisConstants { coinbase accountCreationFee } }");
 
       expect(result.data?.genesisConstants.coinbase).toBeDefined();
       expect(result.data?.genesisConstants.accountCreationFee).toBeDefined();
@@ -112,7 +112,7 @@ describe("Lightnet Integration", () => {
     it("should return best chain", async () => {
       const result = await gql<{
         bestChain: Array<{ stateHash: string }>;
-      }>("{ bestChain(maxLength: 3) { stateHash } }");
+      }>(graphql, "{ bestChain(maxLength: 3) { stateHash } }");
 
       expect(result.data?.bestChain.length).toBeGreaterThan(0);
     });
@@ -137,7 +137,7 @@ describe("Lightnet Integration", () => {
     it("should query sender account balance", async () => {
       const result = await gql<{
         account: { balance: { total: string }; nonce: string };
-      }>(
+      }>(graphql, 
         `query($pk: PublicKey!) { account(publicKey: $pk) { balance { total } nonce } }`,
         { pk: sender.pk }
       );
@@ -150,7 +150,7 @@ describe("Lightnet Integration", () => {
     it("should send a payment", async () => {
       const result = await gql<{
         sendPayment: { payment: { hash: string; id: string } };
-      }>(
+      }>(graphql, 
         `mutation($input: SendPaymentInput!) {
           sendPayment(input: $input) { payment { hash id } }
         }`,
@@ -174,7 +174,7 @@ describe("Lightnet Integration", () => {
     it("should see payment in mempool", async () => {
       const result = await gql<{
         pooledUserCommands: Array<{ hash: string }>;
-      }>(
+      }>(graphql, 
         `query($pk: PublicKey) { pooledUserCommands(publicKey: $pk) { hash } }`,
         { pk: sender.pk }
       );
@@ -185,7 +185,7 @@ describe("Lightnet Integration", () => {
 
     it("should check transaction status", async () => {
       const result = await gql<{ transactionStatus: string }>(
-        `query($payment: ID) { transactionStatus(payment: $payment) }`,
+        graphql, `query($payment: ID) { transactionStatus(payment: $payment) }`,
         { payment: paymentId }
       );
 
@@ -288,7 +288,7 @@ describe("Lightnet Integration", () => {
       // 2. Query balance
       const balanceResult = await gql<{
         account: { balance: { total: string } };
-      }>(
+      }>(graphql, 
         `query($pk: PublicKey!) { account(publicKey: $pk) { balance { total } } }`,
         { pk: account.pk }
       );
