@@ -7,9 +7,9 @@ import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { LiveWriteProvider } from "../../src/providers/live-write.js";
-import { GraphQLClient } from "../../src/graphql/client.js";
 import { ArchiveClient } from "@o1-labs/mina-archive-sdk";
 import { RosettaClient } from "@o1-labs/mina-rosetta-sdk";
+import { MinaClient } from "@o1-labs/mina-sdk";
 import { resolveNetwork } from "../../src/networks.js";
 import { loadWallets } from "../../src/wallets/loader.js";
 import { registerAccountTools } from "../../src/tools/accounts.js";
@@ -24,7 +24,7 @@ import { registerStateTools } from "../../src/tools/state.js";
 import { registerExampleTools } from "../../src/tools/examples.js";
 import { registerRosettaTools } from "../../src/tools/rosetta.js";
 import { registerWalletTools } from "../../src/tools/wallets.js";
-import { createMockGraphQL, createMockArchiveApi, createMockRosetta } from "./helpers.js";
+import { createMockMinaClient, createMockArchiveApi, createMockRosetta } from "./helpers.js";
 
 const signer = new MinaSigner({ network: "testnet" });
 
@@ -32,7 +32,7 @@ interface Ctx {
   client: Client;
   server: McpServer;
   provider: LiveWriteProvider;
-  mockGraphQL: GraphQLClient;
+  mockClient: MinaClient;
   walletA: { alias: string; publicKey: string; privateKey: string };
   walletB: { alias: string; publicKey: string; privateKey: string };
   tmpDir: string;
@@ -68,8 +68,8 @@ async function setupLiveWriteCtx(): Promise<Ctx> {
   const registry = await loadWallets(cfgPath, { signer });
   const provider = new LiveWriteProvider(resolveNetwork("devnet"), registry, signer);
   // Swap upstream clients for mocks so we never touch the real network.
-  const mockGraphQL = createMockGraphQL();
-  (provider as unknown as { graphql: GraphQLClient }).graphql = mockGraphQL;
+  const mockClient = createMockMinaClient();
+  (provider as unknown as { client: MinaClient }).client = mockClient;
   (provider as unknown as { archiveApi: ArchiveClient }).archiveApi = createMockArchiveApi();
   (provider as unknown as { rosetta: RosettaClient }).rosetta = createMockRosetta();
 
@@ -97,7 +97,7 @@ async function setupLiveWriteCtx(): Promise<Ctx> {
     client,
     server,
     provider,
-    mockGraphQL,
+    mockClient,
     walletA: { alias: "warm", ...kA },
     walletB: { alias: "demo", ...kB },
     tmpDir,
@@ -132,11 +132,11 @@ describe("MCP Server - Live Write Mode", () => {
 
   describe("list_wallets", () => {
     it("returns all loaded wallets with balance + nonce; never private keys", async () => {
-      // Fake an account response per wallet — the provider hits get_account
-      // for each wallet in parallel via the GraphQL mock.
-      (ctx.mockGraphQL.query as ReturnType<typeof vi.fn>)
-        .mockResolvedValueOnce({ data: { account: { balance: { total: "1000000000000" }, nonce: "5" } } })
-        .mockResolvedValueOnce({ data: { account: { balance: { total: "2000000000000" }, nonce: "9" } } });
+      // Fake an SDK-typed account per wallet — the provider calls
+      // client.getAccount() for each wallet in parallel.
+      (ctx.mockClient.getAccount as ReturnType<typeof vi.fn>)
+        .mockResolvedValueOnce({ balance: { total: "1000000000000" }, nonce: 5 })
+        .mockResolvedValueOnce({ balance: { total: "2000000000000" }, nonce: 9 });
 
       const result = await ctx.client.callTool({ name: "list_wallets", arguments: {} });
       const text = (result.content as Array<{ type: string; text: string }>)[0].text;
@@ -157,10 +157,9 @@ describe("MCP Server - Live Write Mode", () => {
     it("with dry_run=true returns a signed payload and DOES NOT submit the mutation", async () => {
       // dry_run still hits the daemon once to learn the current nonce —
       // otherwise the returned signed payload wouldn't be a real one you
-      // could submit later. What it must NOT do is call sendPayment.
-      (ctx.mockGraphQL.query as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
-        data: { account: { nonce: "3" } },
-      });
+      // could submit later. What it must NOT do is invoke executeQuery
+      // for the signed-send mutation.
+      (ctx.mockClient.getAccount as ReturnType<typeof vi.fn>).mockResolvedValueOnce({ nonce: 3 });
 
       const result = await ctx.client.callTool({
         name: "send_payment",
@@ -181,21 +180,25 @@ describe("MCP Server - Live Write Mode", () => {
       expect(typeof parsed.signedPayload.signature.field).toBe("string");
       expect(typeof parsed.signedPayload.signature.scalar).toBe("string");
 
-      // Exactly one call: the nonce lookup. No sendPayment mutation.
-      expect(ctx.mockGraphQL.query).toHaveBeenCalledTimes(1);
-      const calls = (ctx.mockGraphQL.query as ReturnType<typeof vi.fn>).mock.calls;
-      expect(calls[0][0]).not.toContain("sendPayment");
+      // Nonce lookup happened, but no signed-send mutation was issued.
+      expect(ctx.mockClient.getAccount).toHaveBeenCalledTimes(1);
+      expect(ctx.mockClient.executeQuery).not.toHaveBeenCalled();
 
       // The server's loaded private key must not appear in the payload.
       expect(text).not.toContain(ctx.walletA.privateKey);
     });
 
     it("without dry_run signs locally and submits via daemon sendPayment with $signature", async () => {
-      // Mock: GraphQL.query is called twice — first for nonce lookup
-      // (account), second for the sendPayment mutation itself.
-      (ctx.mockGraphQL.query as ReturnType<typeof vi.fn>)
-        .mockResolvedValueOnce({ data: { account: { balance: { total: "1000000000000" }, nonce: "7" } } })
-        .mockResolvedValueOnce({ data: { sendPayment: { payment: { hash: "5JtTEST", id: "id1" } } } });
+      // Nonce comes from getAccount; the signed submit goes through
+      // executeQuery (live-write's escape-hatch for the validUntil + signature
+      // shape).
+      (ctx.mockClient.getAccount as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
+        balance: { total: "1000000000000" },
+        nonce: 7,
+      });
+      (ctx.mockClient.executeQuery as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
+        sendPayment: { payment: { hash: "5JtTEST", id: "id1" } },
+      });
 
       const result = await ctx.client.callTool({
         name: "send_payment",
@@ -205,10 +208,10 @@ describe("MCP Server - Live Write Mode", () => {
       const parsed = JSON.parse(text);
       expect(parsed.payment.hash).toBe("5JtTEST");
 
-      // The sendPayment call must include both `input.nonce` (7) and a
-      // non-null `signature` — that's how the daemon knows to skip its
-      // own signing path.
-      const [, vars] = (ctx.mockGraphQL.query as ReturnType<typeof vi.fn>).mock.calls[1];
+      // The submission must include both `input.nonce` (7) and a non-null
+      // `signature` — that's how the daemon knows to skip its own signing.
+      const submitCall = (ctx.mockClient.executeQuery as ReturnType<typeof vi.fn>).mock.calls[0];
+      const vars = submitCall[1] as { input: Record<string, unknown>; signature: Record<string, unknown> };
       expect(vars.input.nonce).toBe("7");
       expect(vars.input.from).toBe(ctx.walletA.publicKey);
       expect(vars.signature.field).toBeDefined();
@@ -216,15 +219,17 @@ describe("MCP Server - Live Write Mode", () => {
     });
 
     it("resolves wallet by `from` publicKey when no alias is given", async () => {
-      (ctx.mockGraphQL.query as ReturnType<typeof vi.fn>)
-        .mockResolvedValueOnce({ data: { account: { nonce: "0" } } })
-        .mockResolvedValueOnce({ data: { sendPayment: { payment: { hash: "h" } } } });
+      (ctx.mockClient.getAccount as ReturnType<typeof vi.fn>).mockResolvedValueOnce({ nonce: 0 });
+      (ctx.mockClient.executeQuery as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
+        sendPayment: { payment: { hash: "h" } },
+      });
 
       await ctx.client.callTool({
         name: "send_payment",
         arguments: { from: ctx.walletB.publicKey, to: ctx.walletA.publicKey, amount: "100", fee: "1" },
       });
-      const [, vars] = (ctx.mockGraphQL.query as ReturnType<typeof vi.fn>).mock.calls[1];
+      const submitCall = (ctx.mockClient.executeQuery as ReturnType<typeof vi.fn>).mock.calls[0];
+      const vars = submitCall[1] as { input: Record<string, unknown> };
       // Sender should be walletB, not the default warm.
       expect(vars.input.from).toBe(ctx.walletB.publicKey);
     });
@@ -250,9 +255,10 @@ describe("MCP Server - Live Write Mode", () => {
     });
 
     it("does not bump the nonce cache when submission fails", async () => {
-      (ctx.mockGraphQL.query as ReturnType<typeof vi.fn>)
-        .mockResolvedValueOnce({ data: { account: { nonce: "10" } } })
-        .mockResolvedValueOnce({ errors: [{ message: "Insufficient balance" }] });
+      (ctx.mockClient.getAccount as ReturnType<typeof vi.fn>).mockResolvedValueOnce({ nonce: 10 });
+      (ctx.mockClient.executeQuery as ReturnType<typeof vi.fn>).mockRejectedValueOnce(
+        new Error("Insufficient balance")
+      );
 
       await ctx.client.callTool({
         name: "send_payment",
@@ -261,9 +267,7 @@ describe("MCP Server - Live Write Mode", () => {
 
       // Cache should not have been touched. Next nonce call against the
       // same wallet should still resolve to max(daemon=10, cache=-1+1=0) = 10.
-      (ctx.mockGraphQL.query as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
-        data: { account: { nonce: "10" } },
-      });
+      (ctx.mockClient.getAccount as ReturnType<typeof vi.fn>).mockResolvedValueOnce({ nonce: 10 });
       const next = await ctx.provider.resolveNonce({ ...ctx.walletA });
       expect(next).toBe(10);
     });
@@ -272,9 +276,10 @@ describe("MCP Server - Live Write Mode", () => {
   describe("nonce cache", () => {
     it("uses max(daemon, cache+1) — bumps to cache+1 when daemon lags", async () => {
       // Seed the cache with a successful submission at nonce 5.
-      (ctx.mockGraphQL.query as ReturnType<typeof vi.fn>)
-        .mockResolvedValueOnce({ data: { account: { nonce: "5" } } })
-        .mockResolvedValueOnce({ data: { sendPayment: { payment: { hash: "h1" } } } });
+      (ctx.mockClient.getAccount as ReturnType<typeof vi.fn>).mockResolvedValueOnce({ nonce: 5 });
+      (ctx.mockClient.executeQuery as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
+        sendPayment: { payment: { hash: "h1" } },
+      });
       await ctx.provider.sendSignedPayment({
         wallet: ctx.walletA,
         payment: { to: ctx.walletB.publicKey, amount: "1", fee: "1" },
@@ -283,18 +288,14 @@ describe("MCP Server - Live Write Mode", () => {
 
       // Daemon still reports the old nonce (archive lag) — we should
       // pick max(daemon=5, cache+1=6) = 6.
-      (ctx.mockGraphQL.query as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
-        data: { account: { nonce: "5" } },
-      });
+      (ctx.mockClient.getAccount as ReturnType<typeof vi.fn>).mockResolvedValueOnce({ nonce: 5 });
       const next = await ctx.provider.resolveNonce(ctx.walletA);
       expect(next).toBe(6);
     });
 
     it("prefers the daemon's nonce when it's ahead of the cache", async () => {
       // No prior submission ⇒ cache empty. Daemon reports 12. Pick 12.
-      (ctx.mockGraphQL.query as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
-        data: { account: { nonce: "12" } },
-      });
+      (ctx.mockClient.getAccount as ReturnType<typeof vi.fn>).mockResolvedValueOnce({ nonce: 12 });
       const next = await ctx.provider.resolveNonce(ctx.walletA);
       expect(next).toBe(12);
     });
@@ -303,14 +304,20 @@ describe("MCP Server - Live Write Mode", () => {
   describe("describe_state", () => {
     it("includes wallets[] with publicKeys + balances (never private keys) and surfaces WRITE_MODE hints", async () => {
       // describe_state issues:
-      //   1. daemon getDaemonStatus
-      //   2. daemon getMempool
-      //   3. listWallets → one daemon account() call per wallet
-      (ctx.mockGraphQL.query as ReturnType<typeof vi.fn>)
-        .mockResolvedValueOnce({ data: { daemonStatus: { syncStatus: "SYNCED", blockchainLength: 100, stateHash: "3NX" } } })
-        .mockResolvedValueOnce({ data: { pooledUserCommands: [] } })
-        .mockResolvedValueOnce({ data: { account: { balance: { total: "1000000000000" }, nonce: "1" } } })
-        .mockResolvedValueOnce({ data: { account: { balance: { total: "2000000000000" }, nonce: "2" } } });
+      //   1. client.getDaemonStatus()
+      //   2. client.getPooledUserCommands()
+      //   3. listWallets → one client.getAccount() call per wallet
+      (ctx.mockClient.getDaemonStatus as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
+        syncStatus: "SYNCED",
+        blockchainLength: 100,
+        stateHash: "3NX",
+        commitId: "",
+        peers: [],
+      });
+      (ctx.mockClient.getPooledUserCommands as ReturnType<typeof vi.fn>).mockResolvedValueOnce([]);
+      (ctx.mockClient.getAccount as ReturnType<typeof vi.fn>)
+        .mockResolvedValueOnce({ balance: { total: "1000000000000" }, nonce: 1 })
+        .mockResolvedValueOnce({ balance: { total: "2000000000000" }, nonce: 2 });
 
       const result = await ctx.client.callTool({ name: "describe_state", arguments: {} });
       const text = (result.content as Array<{ type: string; text: string }>)[0].text;

@@ -7,7 +7,7 @@ import { SessionTracker } from "../../src/session/tracker.js";
 import { ResetController } from "../../src/reset/controller.js";
 import {
   createMockDb,
-  createMockGraphQL,
+  createMockMinaClient,
   createMockArchiveApi,
   createMockAccountsManager,
 } from "./helpers.js";
@@ -21,14 +21,14 @@ describe("http transport", () => {
 
   beforeAll(async () => {
     const mockDb = createMockDb();
-    const mockGraphQL = createMockGraphQL();
+    const mockClient = createMockMinaClient();
     const mockArchiveApi = createMockArchiveApi();
     mockAccountsManager = createMockAccountsManager();
     tracker = new SessionTracker(mockAccountsManager);
     const resetController = new ResetController();
     provider = new TutorialProvider(
       mockDb,
-      mockGraphQL,
+      mockClient,
       mockArchiveApi,
       mockAccountsManager,
       tracker,
@@ -113,7 +113,7 @@ describe("http transport: limits + metrics", () => {
   function makeProvider() {
     return new TutorialProvider(
       createMockDb(),
-      createMockGraphQL(),
+      createMockMinaClient(),
       createMockArchiveApi(),
       createMockAccountsManager()
     );

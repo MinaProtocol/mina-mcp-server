@@ -62,9 +62,7 @@ describe("MCP Server - Live Mode", () => {
   describe("get_block", () => {
     it("passes through to the daemon when a stateHash is provided", async () => {
       const mockBlock = { stateHash: "3NKtest", blockHeight: 1281 };
-      (ctx.mockGraphQL.query as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
-        data: { block: mockBlock },
-      });
+      (ctx.mockClient.getBlock as ReturnType<typeof vi.fn>).mockResolvedValueOnce(mockBlock);
 
       // detail:"full" returns the raw daemon block (default is the lite summary).
       const result = await ctx.client.callTool({ name: "get_block", arguments: { stateHash: "3NKtest", detail: "full" } });
@@ -73,16 +71,19 @@ describe("MCP Server - Live Mode", () => {
     });
 
     it("get_block defaults to a lite summary with transaction counts", async () => {
+      // SDK-shaped (flat) block — matches MinaClient#getBlock's return.
       const mockBlock = {
         stateHash: "3NKlite",
-        protocolState: { consensusState: { blockHeight: "519000", blockCreator: "B62qc" }, blockchainState: {} },
-        transactions: { userCommands: [{ kind: "PAYMENT" }, { kind: "PAYMENT" }], feeTransfer: [] },
+        blockHeight: 519000,
+        blockCreator: "B62qc",
+        userCommands: [{ kind: "PAYMENT" }, { kind: "PAYMENT" }],
+        feeTransfers: [],
       };
-      (ctx.mockGraphQL.query as ReturnType<typeof vi.fn>).mockResolvedValueOnce({ data: { block: mockBlock } });
+      (ctx.mockClient.getBlock as ReturnType<typeof vi.fn>).mockResolvedValueOnce(mockBlock);
 
       const result = await ctx.client.callTool({ name: "get_block", arguments: { stateHash: "3NKlite" } });
       const out = JSON.parse((result.content as Array<{ type: string; text: string }>)[0].text);
-      expect(out.height).toBe("519000");
+      expect(out.height).toBe(519000);
       expect(out.transactionCounts.userCommands).toBe(2);
       expect(out.userCommands).toBeUndefined();
     });
@@ -92,15 +93,20 @@ describe("MCP Server - Live Mode", () => {
       const text = (result.content as Array<{ type: string; text: string }>)[0].text;
       expect(text).toMatch(/requires a stateHash/);
       expect(text).toMatch(/get_archive_blocks/);
-      expect(ctx.mockGraphQL.query).not.toHaveBeenCalled();
+      expect(ctx.mockClient.getBlock).not.toHaveBeenCalled();
     });
   });
 
   describe("describe_state", () => {
     it("returns a live-flavoured snapshot including network metadata and no accounts/reset fields", async () => {
-      (ctx.mockGraphQL.query as ReturnType<typeof vi.fn>)
-        .mockResolvedValueOnce({ data: { daemonStatus: { syncStatus: "SYNCED", blockchainLength: 518429, stateHash: "3NKlive" } } })
-        .mockResolvedValueOnce({ data: { pooledUserCommands: [] } });
+      (ctx.mockClient.getDaemonStatus as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
+        syncStatus: "SYNCED",
+        blockchainLength: 518429,
+        stateHash: "3NKlive",
+        commitId: "",
+        peers: [],
+      });
+      (ctx.mockClient.getPooledUserCommands as ReturnType<typeof vi.fn>).mockResolvedValueOnce([]);
 
       const result = await ctx.client.callTool({ name: "describe_state", arguments: {} });
       const text = (result.content as Array<{ type: string; text: string }>)[0].text;
@@ -136,9 +142,14 @@ describe("MCP Server - Live Mode", () => {
       const { setupLiveMcp } = await import("./helpers.js");
       const mesaCtx = await setupLiveMcp("mesa");
       try {
-        (mesaCtx.mockGraphQL.query as ReturnType<typeof vi.fn>)
-          .mockResolvedValueOnce({ data: { daemonStatus: { syncStatus: "SYNCED", blockchainLength: 7000, stateHash: "3NKmesa" } } })
-          .mockResolvedValueOnce({ data: { pooledUserCommands: [] } });
+        (mesaCtx.mockClient.getDaemonStatus as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
+          syncStatus: "SYNCED",
+          blockchainLength: 7000,
+          stateHash: "3NKmesa",
+          commitId: "",
+          peers: [],
+        });
+        (mesaCtx.mockClient.getPooledUserCommands as ReturnType<typeof vi.fn>).mockResolvedValueOnce([]);
 
         const result = await mesaCtx.client.callTool({ name: "describe_state", arguments: {} });
         const text = (result.content as Array<{ type: string; text: string }>)[0].text;

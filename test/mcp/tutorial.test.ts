@@ -22,9 +22,7 @@ describe("MCP Server - Tutorial Mode", () => {
   describe("account tools", () => {
     it("get_account should query live daemon", async () => {
       const mockAccount = { publicKey: "B62qtest", balance: { total: "1000000000" } };
-      (ctx.mockGraphQL.query as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
-        data: { account: mockAccount },
-      });
+      (ctx.mockClient.getAccount as ReturnType<typeof vi.fn>).mockResolvedValueOnce(mockAccount);
 
       const result = await ctx.client.callTool({ name: "get_account", arguments: { publicKey: "B62qtest" } });
       const text = (result.content as Array<{ type: string; text: string }>)[0].text;
@@ -34,9 +32,7 @@ describe("MCP Server - Tutorial Mode", () => {
 
     it("get_tracked_accounts should return accounts", async () => {
       const mockAccounts = [{ publicKey: "B62qA", balance: { total: "1000" } }];
-      (ctx.mockGraphQL.query as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
-        data: { trackedAccounts: mockAccounts },
-      });
+      (ctx.mockClient.getTrackedAccounts as ReturnType<typeof vi.fn>).mockResolvedValueOnce(mockAccounts);
 
       const result = await ctx.client.callTool({ name: "get_tracked_accounts", arguments: {} });
       const text = (result.content as Array<{ type: string; text: string }>)[0].text;
@@ -47,9 +43,7 @@ describe("MCP Server - Tutorial Mode", () => {
   describe("block tools", () => {
     it("get_block should query live daemon when stateHash provided", async () => {
       const mockBlock = { stateHash: "3NKtest", blockHeight: 100 };
-      (ctx.mockGraphQL.query as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
-        data: { block: mockBlock },
-      });
+      (ctx.mockClient.getBlock as ReturnType<typeof vi.fn>).mockResolvedValueOnce(mockBlock);
 
       // detail:"full" returns the raw daemon block (default is the lite summary).
       const result = await ctx.client.callTool({ name: "get_block", arguments: { stateHash: "3NKtest", detail: "full" } });
@@ -59,9 +53,7 @@ describe("MCP Server - Tutorial Mode", () => {
 
     it("get_best_chain should return chain data", async () => {
       const mockChain = [{ stateHash: "3NK1", blockHeight: 100 }, { stateHash: "3NK2", blockHeight: 99 }];
-      (ctx.mockGraphQL.query as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
-        data: { bestChain: mockChain },
-      });
+      (ctx.mockClient.getBestChain as ReturnType<typeof vi.fn>).mockResolvedValueOnce(mockChain);
 
       const result = await ctx.client.callTool({ name: "get_best_chain", arguments: { detail: "full" } });
       const text = (result.content as Array<{ type: string; text: string }>)[0].text;
@@ -71,10 +63,8 @@ describe("MCP Server - Tutorial Mode", () => {
 
   describe("transaction tools", () => {
     it("send_payment should send via daemon", async () => {
-      const mockPayment = { payment: { id: "pay1", hash: "txhash1" } };
-      (ctx.mockGraphQL.query as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
-        data: { sendPayment: mockPayment },
-      });
+      const mockPayment = { id: "pay1", hash: "txhash1", nonce: 0 };
+      (ctx.mockClient.sendPayment as ReturnType<typeof vi.fn>).mockResolvedValueOnce(mockPayment);
 
       const result = await ctx.client.callTool({
         name: "send_payment",
@@ -85,9 +75,9 @@ describe("MCP Server - Tutorial Mode", () => {
     });
 
     it("send_payment should handle errors", async () => {
-      (ctx.mockGraphQL.query as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
-        errors: [{ message: "Insufficient funds" }],
-      });
+      (ctx.mockClient.sendPayment as ReturnType<typeof vi.fn>).mockRejectedValueOnce(
+        new Error("Insufficient funds")
+      );
 
       const result = await ctx.client.callTool({
         name: "send_payment",
@@ -98,10 +88,8 @@ describe("MCP Server - Tutorial Mode", () => {
     });
 
     it("send_delegation should send via daemon", async () => {
-      const mockDelegation = { sendDelegation: { delegation: { hash: "delhash1" } } };
-      (ctx.mockGraphQL.query as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
-        data: { sendDelegation: mockDelegation },
-      });
+      const mockDelegation = { id: "d1", hash: "delhash1", nonce: 0 };
+      (ctx.mockClient.sendDelegation as ReturnType<typeof vi.fn>).mockResolvedValueOnce(mockDelegation);
 
       const result = await ctx.client.callTool({
         name: "send_delegation",
@@ -112,9 +100,7 @@ describe("MCP Server - Tutorial Mode", () => {
     });
 
     it("get_transaction_status should return status", async () => {
-      (ctx.mockGraphQL.query as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
-        data: { transactionStatus: "INCLUDED" },
-      });
+      (ctx.mockClient.getTransactionStatus as ReturnType<typeof vi.fn>).mockResolvedValueOnce("INCLUDED");
 
       const result = await ctx.client.callTool({
         name: "get_transaction_status",
@@ -126,9 +112,7 @@ describe("MCP Server - Tutorial Mode", () => {
 
     it("get_mempool should return pending transactions", async () => {
       const mockPool = [{ hash: "tx1", amount: "1000" }];
-      (ctx.mockGraphQL.query as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
-        data: { pooledUserCommands: mockPool },
-      });
+      (ctx.mockClient.getPooledUserCommands as ReturnType<typeof vi.fn>).mockResolvedValueOnce(mockPool);
 
       const result = await ctx.client.callTool({ name: "get_mempool", arguments: {} });
       const text = (result.content as Array<{ type: string; text: string }>)[0].text;
@@ -138,10 +122,8 @@ describe("MCP Server - Tutorial Mode", () => {
 
   describe("network tools", () => {
     it("get_sync_status should return daemon status in tutorial mode", async () => {
-      const mockStatus = { syncStatus: "SYNCED", blockchainLength: 100 };
-      (ctx.mockGraphQL.query as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
-        data: mockStatus,
-      });
+      const mockStatus = { syncStatus: "SYNCED", blockchainLength: 100, stateHash: "3NK...", commitId: "abc", peers: [] };
+      (ctx.mockClient.getDaemonStatus as ReturnType<typeof vi.fn>).mockResolvedValueOnce(mockStatus);
 
       const result = await ctx.client.callTool({ name: "get_sync_status", arguments: {} });
       const text = (result.content as Array<{ type: string; text: string }>)[0].text;
@@ -150,7 +132,7 @@ describe("MCP Server - Tutorial Mode", () => {
     });
 
     it("get_sync_status should handle daemon unreachable", async () => {
-      (ctx.mockGraphQL.query as ReturnType<typeof vi.fn>).mockRejectedValueOnce(
+      (ctx.mockClient.getDaemonStatus as ReturnType<typeof vi.fn>).mockRejectedValueOnce(
         new Error("ECONNREFUSED")
       );
 
@@ -160,10 +142,8 @@ describe("MCP Server - Tutorial Mode", () => {
     });
 
     it("get_genesis_constants should return constants", async () => {
-      const mockConstants = { coinbase: "720000000000", accountCreationFee: "1000000000" };
-      (ctx.mockGraphQL.query as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
-        data: { genesisConstants: mockConstants },
-      });
+      const mockConstants = { coinbase: "720000000000", accountCreationFee: "1000000000", genesisTimestamp: "2026-01-01" };
+      (ctx.mockClient.getGenesisConstants as ReturnType<typeof vi.fn>).mockResolvedValueOnce(mockConstants);
 
       const result = await ctx.client.callTool({ name: "get_genesis_constants", arguments: {} });
       const text = (result.content as Array<{ type: string; text: string }>)[0].text;
@@ -171,9 +151,7 @@ describe("MCP Server - Tutorial Mode", () => {
     });
 
     it("get_network_id should return network ID", async () => {
-      (ctx.mockGraphQL.query as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
-        data: { networkID: "mina:testnet" },
-      });
+      (ctx.mockClient.getNetworkId as ReturnType<typeof vi.fn>).mockResolvedValueOnce("mina:testnet");
 
       const result = await ctx.client.callTool({ name: "get_network_id", arguments: {} });
       const text = (result.content as Array<{ type: string; text: string }>)[0].text;
@@ -379,15 +357,17 @@ describe("MCP Server - Tutorial Mode", () => {
 
   describe("describe_state", () => {
     it("returns a unified snapshot of chain, mempool, accounts, and reset state", async () => {
-      (ctx.mockGraphQL.query as ReturnType<typeof vi.fn>).mockImplementation(async (q: string) => {
-        if (q.includes("daemonStatus")) {
-          return { data: { daemonStatus: { syncStatus: "SYNCED", blockchainLength: 42, stateHash: "3NK..." } } };
-        }
-        if (q.includes("pooledUserCommands")) {
-          return { data: { pooledUserCommands: [{ hash: "Ckp1" }, { hash: "Ckp2" }] } };
-        }
-        return { data: {} };
+      (ctx.mockClient.getDaemonStatus as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
+        syncStatus: "SYNCED",
+        blockchainLength: 42,
+        stateHash: "3NK...",
+        commitId: "",
+        peers: [],
       });
+      (ctx.mockClient.getPooledUserCommands as ReturnType<typeof vi.fn>).mockResolvedValueOnce([
+        { hash: "Ckp1" },
+        { hash: "Ckp2" },
+      ]);
       (ctx.mockAccountsManager.listAcquiredAccounts as ReturnType<typeof vi.fn>).mockResolvedValueOnce([
         { pk: "B62qserver1", sk: "EK1" },
         { pk: "B62qserver2", sk: "EK2" },
@@ -416,7 +396,8 @@ describe("MCP Server - Tutorial Mode", () => {
     });
 
     it("captures partial failures without losing other fields", async () => {
-      (ctx.mockGraphQL.query as ReturnType<typeof vi.fn>).mockRejectedValue(new Error("daemon offline"));
+      (ctx.mockClient.getDaemonStatus as ReturnType<typeof vi.fn>).mockRejectedValue(new Error("daemon offline"));
+      (ctx.mockClient.getPooledUserCommands as ReturnType<typeof vi.fn>).mockRejectedValue(new Error("daemon offline"));
       (ctx.mockAccountsManager.listAcquiredAccounts as ReturnType<typeof vi.fn>).mockResolvedValueOnce([]);
 
       const result = await ctx.client.callTool({ name: "describe_state", arguments: {} });

@@ -1,5 +1,5 @@
 import { ArchiveClient } from "@o1-labs/mina-archive-sdk";
-import { GraphQLClient } from "../graphql/client.js";
+import { createMinaClient } from "../graphql/client.js";
 import { ArchiveDB } from "../db/archive.js";
 import { TutorialProvider } from "./tutorial.js";
 import { NetworkConfig, preflightWarning } from "../networks.js";
@@ -24,9 +24,9 @@ export class LiveProvider extends TutorialProvider {
     // aren't registered in live mode. The throw-on-query stub guarantees a
     // loud failure if anything bypasses the registration filter.
     const stubDb = new StubArchiveDB();
-    const graphql = new GraphQLClient(network.daemonGraphql);
+    const client = createMinaClient(network.daemonGraphql);
     const archiveApi = new ArchiveClient(network.archiveNodeApi);
-    super(stubDb as unknown as ArchiveDB, graphql, archiveApi);
+    super(stubDb as unknown as ArchiveDB, client, archiveApi);
     this.network = network;
     this.rosetta =
       network.rosettaUrl && network.rosettaNetwork

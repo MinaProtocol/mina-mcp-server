@@ -23,7 +23,7 @@ export function registerNetworkTools(
             content: [
               {
                 type: "text",
-                text: `Daemon not reachable: ${(e as Error).message}\nGraphQL endpoint: ${provider.graphql.getEndpoint()}`,
+                text: `Daemon not reachable: ${(e as Error).message}\nGraphQL endpoint: ${provider.getDaemonEndpoint()}`,
               },
             ],
           };

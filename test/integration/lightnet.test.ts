@@ -10,7 +10,26 @@
  */
 
 import { describe, it, expect, beforeAll } from "vitest";
-import { GraphQLClient } from "../../src/graphql/client.js";
+import { createMinaClient, isConnected as clientConnected } from "../../src/graphql/client.js";
+import { MinaClient, GraphQLError } from "@o1-labs/mina-sdk";
+
+// Legacy { data, errors } shim over the SDK transport — keeps long-form
+// integration assertions readable without rewriting every call site.
+async function gql<T>(
+  client: MinaClient,
+  query: string,
+  variables?: Record<string, unknown>
+): Promise<{ data?: T; errors?: Array<{ message: string }> }> {
+  try {
+    const data = await client.executeQuery<T>(query, variables, "integration_test");
+    return { data };
+  } catch (err) {
+    if (err instanceof GraphQLError) {
+      return { errors: err.errors.map((e) => ({ message: e.message })) };
+    }
+    return { errors: [{ message: (err as Error).message }] };
+  }
+}
 import { ArchiveClient } from "@o1-labs/mina-archive-sdk";
 import { AccountsManager, type TestAccount } from "../../src/graphql/accounts-manager.js";
 import { ArchiveDB } from "../../src/db/archive.js";
@@ -20,13 +39,13 @@ const ARCHIVE_API_ENDPOINT = process.env.ARCHIVE_API_ENDPOINT ?? "http://localho
 const ACCOUNTS_MANAGER_ENDPOINT = process.env.ACCOUNTS_MANAGER_ENDPOINT ?? "http://localhost:8181";
 
 describe("Lightnet Integration", () => {
-  let graphql: GraphQLClient;
+  let graphql: MinaClient;
   let archiveApi: ArchiveClient;
   let accountsMgr: AccountsManager;
   let db: ArchiveDB;
 
   beforeAll(() => {
-    graphql = new GraphQLClient(DAEMON_ENDPOINT);
+    graphql = createMinaClient(DAEMON_ENDPOINT);
     archiveApi = new ArchiveClient(ARCHIVE_API_ENDPOINT);
     accountsMgr = new AccountsManager(ACCOUNTS_MANAGER_ENDPOINT);
     db = new ArchiveDB();
@@ -34,11 +53,11 @@ describe("Lightnet Integration", () => {
 
   describe("Service connectivity", () => {
     it("daemon GraphQL should be reachable", async () => {
-      expect(await graphql.isConnected()).toBe(true);
+      expect(await clientConnected(graphql)).toBe(true);
     });
 
     it("daemon should be SYNCED", async () => {
-      const result = await graphql.query<{ syncStatus: string }>("{ syncStatus }");
+      const result = await gql<{ syncStatus: string }>(graphql, "{ syncStatus }");
       expect(result.data?.syncStatus).toBe("SYNCED");
     });
 
@@ -73,7 +92,7 @@ describe("Lightnet Integration", () => {
 
   describe("Daemon GraphQL - Queries", () => {
     it("should return daemon status", async () => {
-      const result = await graphql.query<{
+      const result = await gql<{
         daemonStatus: { blockchainLength: number; syncStatus: string };
       }>("{ daemonStatus { blockchainLength syncStatus } }");
 
@@ -82,7 +101,7 @@ describe("Lightnet Integration", () => {
     });
 
     it("should return genesis constants", async () => {
-      const result = await graphql.query<{
+      const result = await gql<{
         genesisConstants: { coinbase: string; accountCreationFee: string };
       }>("{ genesisConstants { coinbase accountCreationFee } }");
 
@@ -91,7 +110,7 @@ describe("Lightnet Integration", () => {
     });
 
     it("should return best chain", async () => {
-      const result = await graphql.query<{
+      const result = await gql<{
         bestChain: Array<{ stateHash: string }>;
       }>("{ bestChain(maxLength: 3) { stateHash } }");
 
@@ -99,7 +118,7 @@ describe("Lightnet Integration", () => {
     });
 
     it("should return network ID", async () => {
-      const result = await graphql.query<{ networkID: string }>("{ networkID }");
+      const result = await gql<{ networkID: string }>(graphql, "{ networkID }");
       expect(result.data?.networkID).toBeDefined();
     });
   });
@@ -116,7 +135,7 @@ describe("Lightnet Integration", () => {
     });
 
     it("should query sender account balance", async () => {
-      const result = await graphql.query<{
+      const result = await gql<{
         account: { balance: { total: string }; nonce: string };
       }>(
         `query($pk: PublicKey!) { account(publicKey: $pk) { balance { total } nonce } }`,
@@ -129,7 +148,7 @@ describe("Lightnet Integration", () => {
     });
 
     it("should send a payment", async () => {
-      const result = await graphql.query<{
+      const result = await gql<{
         sendPayment: { payment: { hash: string; id: string } };
       }>(
         `mutation($input: SendPaymentInput!) {
@@ -153,7 +172,7 @@ describe("Lightnet Integration", () => {
     });
 
     it("should see payment in mempool", async () => {
-      const result = await graphql.query<{
+      const result = await gql<{
         pooledUserCommands: Array<{ hash: string }>;
       }>(
         `query($pk: PublicKey) { pooledUserCommands(publicKey: $pk) { hash } }`,
@@ -165,7 +184,7 @@ describe("Lightnet Integration", () => {
     });
 
     it("should check transaction status", async () => {
-      const result = await graphql.query<{ transactionStatus: string }>(
+      const result = await gql<{ transactionStatus: string }>(
         `query($payment: ID) { transactionStatus(payment: $payment) }`,
         { payment: paymentId }
       );
@@ -267,7 +286,7 @@ describe("Lightnet Integration", () => {
       expect(account.pk).toMatch(/^B62q/);
 
       // 2. Query balance
-      const balanceResult = await graphql.query<{
+      const balanceResult = await gql<{
         account: { balance: { total: string } };
       }>(
         `query($pk: PublicKey!) { account(publicKey: $pk) { balance { total } } }`,

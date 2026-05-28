@@ -7,14 +7,15 @@ import {
   shapeRosettaBlock,
 } from "../../src/tools/shape.js";
 
+// SDK-shaped daemon block (flat — matches what MinaClient#getBlock returns).
 function daemonBlock(txCount: number) {
   const userCommands = Array.from({ length: txCount }, (_, i) => ({
     id: `id${i}`,
     hash: `hash${i}`,
     kind: i % 2 === 0 ? "PAYMENT" : "STAKE_DELEGATION",
-    nonce: i,
-    source: { publicKey: "B62qsource" },
-    receiver: { publicKey: "B62qreceiver" },
+    nonce: String(i),
+    source: "B62qsource",
+    receiver: "B62qreceiver",
     amount: "1000000000",
     fee: "100000000",
     memo: "",
@@ -22,17 +23,20 @@ function daemonBlock(txCount: number) {
   }));
   return {
     stateHash: "3Nstate",
-    protocolState: {
-      previousStateHash: "3Nprev",
-      consensusState: { blockHeight: "519000", slot: "42", blockCreator: "B62qcreator" },
-      blockchainState: { date: "1", utcDate: "2026-05-21T00:00:00Z", snarkedLedgerHash: "j", stagedLedgerHash: "j" },
-    },
-    transactions: {
-      userCommands,
-      feeTransfer: [{ recipient: "B62q", fee: "1", type: "Fee_transfer" }],
-      coinbase: "720000000000",
-      coinbaseReceiverAccount: { publicKey: "B62qcoinbase" },
-    },
+    previousStateHash: "3Nprev",
+    blockHeight: 519000,
+    epoch: 7,
+    slot: 42,
+    slotSinceGenesis: 100042,
+    blockCreator: "B62qcreator",
+    date: "1",
+    utcDate: "2026-05-21T00:00:00Z",
+    snarkedLedgerHash: "j",
+    stagedLedgerHash: "j",
+    coinbase: "720000000000",
+    coinbaseReceiver: "B62qcoinbase",
+    feeTransfers: [{ recipient: "B62q", fee: "1", type: "Fee_transfer" }],
+    userCommands,
   };
 }
 
@@ -40,7 +44,7 @@ describe("shapeDaemonBlock", () => {
   it("lite returns header + counts, no per-tx detail", () => {
     const out = shapeDaemonBlock(daemonBlock(60), { detail: "lite", transactionLimit: 20, transactionOffset: 0 });
     expect(out.stateHash).toBe("3Nstate");
-    expect(out.height).toBe("519000");
+    expect(out.height).toBe(519000);
     expect(out.coinbaseReceiver).toBe("B62qcoinbase");
     expect(out.transactionCounts).toEqual({
       userCommands: 60,

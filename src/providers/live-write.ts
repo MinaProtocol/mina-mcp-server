@@ -2,7 +2,43 @@ import MinaSigner from "mina-signer";
 import { LiveProvider } from "./live.js";
 import { NetworkConfig } from "../networks.js";
 import { LoadedWallet, WalletRegistry } from "../wallets/types.js";
-import { QUERIES } from "../graphql/queries.js";
+
+// Signed-submit mutations stay inline here because live-write needs to set
+// `validUntil` (computed by mina-signer) which the SDK's typed `sendPayment`
+// / `sendDelegation` don't yet expose. Tutorial-mode (daemon-signed) submits
+// use the SDK's typed methods via TutorialProvider.
+const SIGNED_SEND_PAYMENT = `
+mutation ($input: SendPaymentInput!, $signature: SignatureInput) {
+  sendPayment(input: $input, signature: $signature) {
+    payment {
+      id
+      hash
+      kind
+      nonce
+      source { publicKey }
+      receiver { publicKey }
+      amount
+      fee
+      memo
+    }
+  }
+}`;
+
+const SIGNED_SEND_DELEGATION = `
+mutation ($input: SendDelegationInput!, $signature: SignatureInput) {
+  sendDelegation(input: $input, signature: $signature) {
+    delegation {
+      id
+      hash
+      kind
+      nonce
+      source { publicKey }
+      receiver { publicKey }
+      fee
+      memo
+    }
+  }
+}`;
 
 // Mina transaction memos are capped at 32 bytes on-chain. Enforce it before
 // signing so an over-long memo fails fast with a clear error rather than
@@ -239,17 +275,15 @@ export class LiveWriteProvider extends LiveProvider {
     if ((signed.data as { validUntil?: string }).validUntil) {
       input.validUntil = (signed.data as { validUntil: string }).validUntil;
     }
-    const result = (await this.graphql.query(QUERIES.sendPayment, {
-      input,
-      signature: signed.signature,
-    })) as { data?: { sendPayment?: unknown }; errors?: Array<{ message: string }> };
-    if (result.errors?.length) {
-      throw new Error(result.errors.map((e) => e.message).join("; "));
-    }
+    const data = await this.client.executeQuery<{ sendPayment?: Record<string, unknown> }>(
+      SIGNED_SEND_PAYMENT,
+      { input, signature: signed.signature },
+      "send_signed_payment"
+    );
     // Bump the cache *after* a successful submit so a failed submit doesn't
     // burn a nonce. If the daemon ACKs, the next send must use nonce+1.
     this.nonceCache.set(opts.wallet.publicKey, nonce);
-    return (result.data?.sendPayment ?? {}) as Record<string, unknown>;
+    return (data.sendPayment ?? {}) as Record<string, unknown>;
   }
 
   async sendSignedDelegation(opts: {
@@ -293,14 +327,12 @@ export class LiveWriteProvider extends LiveProvider {
     if ((signed.data as { validUntil?: string }).validUntil) {
       input.validUntil = (signed.data as { validUntil: string }).validUntil;
     }
-    const result = (await this.graphql.query(QUERIES.sendDelegation, {
-      input,
-      signature: signed.signature,
-    })) as { data?: { sendDelegation?: unknown }; errors?: Array<{ message: string }> };
-    if (result.errors?.length) {
-      throw new Error(result.errors.map((e) => e.message).join("; "));
-    }
+    const data = await this.client.executeQuery<{ sendDelegation?: Record<string, unknown> }>(
+      SIGNED_SEND_DELEGATION,
+      { input, signature: signed.signature },
+      "send_signed_delegation"
+    );
     this.nonceCache.set(opts.wallet.publicKey, nonce);
-    return (result.data?.sendDelegation ?? {}) as Record<string, unknown>;
+    return (data.sendDelegation ?? {}) as Record<string, unknown>;
   }
 }

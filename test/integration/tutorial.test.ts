@@ -16,7 +16,7 @@ import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { ArchiveDB } from "../../src/db/archive.js";
-import { GraphQLClient } from "../../src/graphql/client.js";
+import { createMinaClient } from "../../src/graphql/client.js";
 import { ArchiveClient } from "@o1-labs/mina-archive-sdk";
 import { AccountsManager } from "../../src/graphql/accounts-manager.js";
 import { TutorialProvider } from "../../src/providers/tutorial.js";
@@ -39,7 +39,7 @@ describe("Tutorial Mode Integration - MCP Tools", () => {
 
   beforeAll(async () => {
     db = new ArchiveDB();
-    const graphql = new GraphQLClient(DAEMON_ENDPOINT);
+    const graphql = createMinaClient(DAEMON_ENDPOINT);
     const archiveApi = new ArchiveClient(ARCHIVE_API_ENDPOINT);
     const accountsManager = new AccountsManager(ACCOUNTS_MANAGER_ENDPOINT);
     const provider = new TutorialProvider(db, graphql, archiveApi, accountsManager);

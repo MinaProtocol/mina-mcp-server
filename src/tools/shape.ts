@@ -33,28 +33,29 @@ function txKindCounts(userCommands: Json[]): Record<string, number> {
   return counts;
 }
 
-/** Shape a daemon GraphQL block (QUERIES.block / a bestChain element). */
+/**
+ * Shape a daemon block as returned by the SDK's `getBlock()` / `getBestChain()`
+ * methods. SDK responses are flat: `block.blockHeight`, `block.userCommands`,
+ * etc. — no more `protocolState.consensusState.*` nesting.
+ */
 export function shapeDaemonBlock(block: Json, opts: PageOpts): Json {
   if (opts.detail === "full") return block;
-  const cs = block?.protocolState?.consensusState ?? {};
-  const bs = block?.protocolState?.blockchainState ?? {};
-  const tx = block?.transactions ?? {};
-  const userCommands: Json[] = Array.isArray(tx.userCommands) ? tx.userCommands : [];
-  const feeTransfer: Json[] = Array.isArray(tx.feeTransfer) ? tx.feeTransfer : [];
+  const userCommands: Json[] = Array.isArray(block?.userCommands) ? block.userCommands : [];
+  const feeTransfers: Json[] = Array.isArray(block?.feeTransfers) ? block.feeTransfers : [];
 
   const header: Json = {
     stateHash: block?.stateHash,
-    height: cs.blockHeight,
-    previousStateHash: block?.protocolState?.previousStateHash,
-    creator: cs.blockCreator,
-    slot: cs.slot,
-    date: bs.utcDate ?? bs.date,
-    coinbase: tx.coinbase,
-    coinbaseReceiver: tx.coinbaseReceiverAccount?.publicKey,
+    height: block?.blockHeight ?? block?.height,
+    previousStateHash: block?.previousStateHash,
+    creator: block?.blockCreator ?? block?.creatorPublicKey,
+    slot: block?.slot ?? block?.globalSlotSinceHardFork,
+    date: block?.utcDate ?? block?.date,
+    coinbase: block?.coinbase,
+    coinbaseReceiver: block?.coinbaseReceiver,
     transactionCounts: {
       userCommands: userCommands.length,
       byKind: txKindCounts(userCommands),
-      feeTransfers: feeTransfer.length,
+      feeTransfers: feeTransfers.length,
     },
   };
 

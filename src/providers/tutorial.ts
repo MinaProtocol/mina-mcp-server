@@ -1,13 +1,6 @@
 import { ArchiveClient } from "@o1-labs/mina-archive-sdk";
-import { GraphQLClient } from "../graphql/client.js";
-import { QUERIES } from "../graphql/queries.js";
-import {
-  AccountResponse,
-  BestChainResponse,
-  BlockResponse,
-  GenesisConstantsResponse,
-  validateData,
-} from "../graphql/schemas.js";
+import { Currency, MinaClient } from "@o1-labs/mina-sdk";
+import { isConnected as clientConnected } from "../graphql/client.js";
 import { AccountsManager } from "../graphql/accounts-manager.js";
 import { SessionTracker } from "../session/tracker.js";
 import { ResetController } from "../reset/controller.js";
@@ -15,7 +8,7 @@ import { SnapshotProvider } from "./snapshot.js";
 import { ArchiveDB } from "../db/archive.js";
 
 export class TutorialProvider extends SnapshotProvider {
-  public graphql: GraphQLClient;
+  public client: MinaClient;
   public archiveApi: ArchiveClient | null;
   public accountsManager: AccountsManager | null;
   public tracker: SessionTracker | null;
@@ -24,47 +17,58 @@ export class TutorialProvider extends SnapshotProvider {
 
   constructor(
     db: ArchiveDB,
-    graphql: GraphQLClient,
+    client: MinaClient,
     archiveApi?: ArchiveClient,
     accountsManager?: AccountsManager,
     tracker?: SessionTracker,
     resetController?: ResetController
   ) {
     super(db);
-    this.graphql = graphql;
+    this.client = client;
     this.archiveApi = archiveApi ?? null;
     this.accountsManager = accountsManager ?? null;
     this.tracker = tracker ?? null;
     this.resetController = resetController ?? null;
   }
 
+  /** Underlying daemon endpoint — used by tools that surface it in error messages. */
+  getDaemonEndpoint(): string {
+    return this.client.graphqlUri;
+  }
+
+  /** True when the daemon answers a basic `syncStatus` query. */
+  async isDaemonConnected(): Promise<boolean> {
+    return clientConnected(this.client);
+  }
+
   async getSyncStatus(): Promise<string> {
-    const result = await this.graphql.query<{ syncStatus: string }>(QUERIES.syncStatus);
-    return result.data?.syncStatus ?? "UNKNOWN";
+    try {
+      return await this.client.getSyncStatus();
+    } catch {
+      return "UNKNOWN";
+    }
   }
 
   async getDaemonStatus() {
-    const result = await this.graphql.query(QUERIES.daemonStatus);
-    if (result.errors) throw new Error(result.errors[0].message);
-    return result.data;
+    return this.client.getDaemonStatus();
   }
 
   // "1" is the canonical MINA token id; the daemon resolver rejects undefined here.
   static readonly MINA_TOKEN_ID = "1";
 
   async getAccountLive(publicKey: string, token?: string) {
-    const result = await this.graphql.query(QUERIES.account, {
-      publicKey,
-      token: token ?? TutorialProvider.MINA_TOKEN_ID,
-    });
-    if (result.errors) throw new Error(result.errors[0].message);
-    return validateData(AccountResponse, result.data, "account").account ?? null;
+    try {
+      return await this.client.getAccount(publicKey, token ?? TutorialProvider.MINA_TOKEN_ID);
+    } catch (err) {
+      // SDK throws AccountNotFoundError on missing account; map back to the
+      // null-or-empty shape tools already render as "Account not found".
+      if (err instanceof Error && err.name === "AccountNotFoundError") return null;
+      throw err;
+    }
   }
 
   async getBestChain(maxLength = 10) {
-    const result = await this.graphql.query(QUERIES.bestChain, { maxLength });
-    if (result.errors) throw new Error(result.errors[0].message);
-    return validateData(BestChainResponse, result.data, "bestChain").bestChain ?? [];
+    return this.client.getBestChain(maxLength);
   }
 
   async getBlockLive(stateHash?: string, height?: number) {
@@ -89,12 +93,14 @@ export class TutorialProvider extends SnapshotProvider {
     if (!resolvedStateHash) {
       throw new Error("Provide either stateHash or height");
     }
-    const result = await this.graphql.query(QUERIES.block, {
-      stateHash: resolvedStateHash,
-      height: null,
-    });
-    if (result.errors) throw new Error(result.errors[0].message);
-    return validateData(BlockResponse, result.data, "block").block ?? null;
+    try {
+      return await this.client.getBlock({ stateHash: resolvedStateHash });
+    } catch (err) {
+      // SDK throws a plain Error("block not found ...") when the daemon
+      // returns null — surface as the null tools render as "Block not found".
+      if (err instanceof Error && err.message.startsWith("block not found")) return null;
+      throw err;
+    }
   }
 
   async sendPayment(input: {
@@ -104,78 +110,51 @@ export class TutorialProvider extends SnapshotProvider {
     fee: string;
     memo?: string;
   }) {
-    // signature: null tells the daemon to sign with its own wallet keys.
-    // The mutation declares $signature so an *explicit* null is required —
-    // omitting the variable triggers "Missing variable `signature`".
-    const result = await this.graphql.query(QUERIES.sendPayment, {
-      input: {
-        from: input.from,
-        to: input.to,
-        amount: input.amount,
-        fee: input.fee,
-        memo: input.memo ?? "",
-      },
-      signature: null,
+    // signature defaults to null: tells the daemon to sign with its own
+    // wallet keys (tutorial/lightnet). The SDK's sendPayment passes the
+    // explicit-null `$signature` the daemon requires when the variable is
+    // declared.
+    return this.client.sendPayment({
+      sender: input.from,
+      receiver: input.to,
+      amount: Currency.fromGraphQL(input.amount),
+      fee: Currency.fromGraphQL(input.fee),
+      ...(input.memo ? { memo: input.memo } : {}),
     });
-    if (result.errors) throw new Error(result.errors[0].message);
-    return (result.data as Record<string, unknown>)?.sendPayment ?? null;
   }
 
   async sendDelegation(input: { from: string; to: string; fee: string; memo?: string }) {
-    const result = await this.graphql.query(QUERIES.sendDelegation, {
-      input: {
-        from: input.from,
-        to: input.to,
-        fee: input.fee,
-        memo: input.memo ?? "",
-      },
-      signature: null,
+    return this.client.sendDelegation({
+      sender: input.from,
+      delegateTo: input.to,
+      fee: Currency.fromGraphQL(input.fee),
+      ...(input.memo ? { memo: input.memo } : {}),
     });
-    if (result.errors) throw new Error(result.errors[0].message);
-    return (result.data as Record<string, unknown>)?.sendDelegation ?? null;
   }
 
   async getMempool(publicKey?: string) {
-    const result = await this.graphql.query(QUERIES.pooledUserCommands, { publicKey: publicKey ?? null });
-    if (result.errors) throw new Error(result.errors[0].message);
-    return (result.data as Record<string, unknown>)?.pooledUserCommands ?? [];
+    return this.client.getPooledUserCommands(publicKey);
   }
 
   async getTransactionStatus(payment?: string, zkappTransaction?: string) {
-    // Build query with only the provided variable to avoid "Missing variable" errors
-    let query: string;
-    let variables: Record<string, string>;
-    if (payment) {
-      query = `query TransactionStatus($payment: ID!) { transactionStatus(payment: $payment) }`;
-      variables = { payment };
-    } else if (zkappTransaction) {
-      query = `query TransactionStatus($zkappTransaction: ID!) { transactionStatus(zkappTransaction: $zkappTransaction) }`;
-      variables = { zkappTransaction };
-    } else {
-      throw new Error("Provide either payment or zkappTransaction ID");
-    }
-    const result = await this.graphql.query(query, variables);
-    if (result.errors) throw new Error(result.errors[0].message);
-    return (result.data as Record<string, unknown>)?.transactionStatus ?? null;
+    if (payment) return this.client.getTransactionStatus({ payment });
+    if (zkappTransaction) return this.client.getTransactionStatus({ zkappTransaction });
+    throw new Error("Provide either payment or zkappTransaction ID");
   }
 
   async getGenesisConstants() {
-    const result = await this.graphql.query(QUERIES.genesisConstants);
-    if (result.errors) throw new Error(result.errors[0].message);
-    return validateData(GenesisConstantsResponse, result.data, "genesisConstants").genesisConstants;
+    return this.client.getGenesisConstants();
   }
 
   async getNetworkID(): Promise<string> {
-    const result = await this.graphql.query<{ networkID: string }>(QUERIES.networkID);
-    if (result.errors) throw new Error(result.errors[0].message);
-    return result.data?.networkID ?? "UNKNOWN";
+    try {
+      return await this.client.getNetworkId();
+    } catch {
+      return "UNKNOWN";
+    }
   }
 
   async getTrackedAccounts() {
-    const result = await this.graphql.query<{
-      trackedAccounts: Array<{ publicKey: string; balance: { total: string } }>;
-    }>("{ trackedAccounts { publicKey balance { total } } }");
-    if (result.errors) throw new Error(result.errors[0].message);
-    return result.data?.trackedAccounts ?? [];
+    return this.client.getTrackedAccounts();
   }
 }
