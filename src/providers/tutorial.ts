@@ -96,9 +96,11 @@ export class TutorialProvider extends SnapshotProvider {
     try {
       return await this.client.getBlock({ stateHash: resolvedStateHash });
     } catch (err) {
-      // SDK throws a plain Error("block not found ...") when the daemon
-      // returns null — surface as the null tools render as "Block not found".
-      if (err instanceof Error && err.message.startsWith("block not found")) return null;
+      // SDK doesn't yet expose a typed BlockNotFoundError — match the message
+      // case-insensitively + tolerate the daemon's two phrasings ("block not
+      // found" / "Block not found"). When the SDK ships a named error, swap
+      // for `err.name === "BlockNotFoundError"` like getAccount.
+      if (err instanceof Error && /\bblock not found\b/i.test(err.message)) return null;
       throw err;
     }
   }

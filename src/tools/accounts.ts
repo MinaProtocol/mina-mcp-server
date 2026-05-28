@@ -30,7 +30,7 @@ export function registerAccountTools(
   if (mode === "tutorial") {
     server.tool(
       "get_staking_ledger",
-      "Get staking ledger entries from the archive database. Returns up to 100 accounts with their staking info.",
+      "[tutorial] Get staking ledger entries from the archive database. Returns up to 100 accounts with their staking info. Tutorial mode only — requires a local archive DB.",
       { epoch: z.number().optional().describe("Epoch number (optional)") },
       async ({ epoch }) => {
         const provider = getProvider();

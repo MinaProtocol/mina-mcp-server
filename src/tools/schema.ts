@@ -11,10 +11,10 @@ export function registerSchemaTools(
 
   server.tool(
     "query_archive_sql",
-    "[infra] Execute a read-only SQL query against the archive database. Only SELECT/WITH/EXPLAIN statements are allowed. Query timeout is 10 seconds. Useful for advanced exploration of blockchain data.",
+    "[infra][tutorial+snapshot] Execute a read-only SQL query against the archive database. Only SELECT/WITH/EXPLAIN statements are allowed. Query timeout is 10 seconds. Not available in live mode (no archive DB). Common tables: `blocks`, `user_commands`, `internal_commands`, `public_keys`, `accounts_accessed`. Call `get_archive_schema` first if you don't know the table layout.",
     {
-      sql: z.string().describe("SQL query (SELECT only)"),
-      params: z.array(z.union([z.string(), z.number()])).optional().describe("Query parameters ($1, $2, ...)"),
+      sql: z.string().describe("Read-only SQL (SELECT / WITH / EXPLAIN only). Example: SELECT state_hash, height FROM blocks WHERE chain_status = 'canonical' ORDER BY height DESC LIMIT 10"),
+      params: z.array(z.union([z.string(), z.number()])).optional().describe("Parameterized values: $1, $2, ... in the SQL"),
     },
     async ({ sql, params }) => {
       const provider = getProvider();

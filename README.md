@@ -422,17 +422,29 @@ npm run test:integration
 test/
   unit/                    # Unit tests - mock all external dependencies
     accounts-manager.test.ts
-    archive-api.test.ts
     archive-db.test.ts
-    graphql-client.test.ts
+    example-library.test.ts
+    live-provider.test.ts
+    networks.test.ts
+    reset-controller.test.ts
+    schemas.test.ts
+    session-tracker.test.ts
+    shape.test.ts
     snapshot-provider.test.ts
     tutorial-provider.test.ts
+    wallet-caps.test.ts
+    wallets-loader.test.ts
   mcp/                     # MCP protocol tests - InMemoryTransport + Client
     helpers.ts             # Shared setup: mock providers, transport wiring
-    snapshot.test.ts       # Snapshot mode: all tools, guards, responses
+    snapshot.test.ts       # Snapshot mode
     tutorial.test.ts       # Tutorial mode: live tools, zkApp, faucet
-  integration/             # Integration tests - requires live lightnet
+    live.test.ts           # Live mode: read-only against public networks
+    live-write.test.ts     # Live-write mode: wallet loading + signed sends
+    http-transport.test.ts # HTTP transport: rate-limiting, /health, /metrics
+    wallets-redaction.test.ts # Sweep: no private key leaks any tool response
+  integration/             # Integration tests - require live lightnet
     lightnet.test.ts
+    tutorial.test.ts
 ```
 
 The **MCP tests** use `@modelcontextprotocol/sdk`'s `InMemoryTransport` to create a linked client-server pair in-process. This tests the full MCP protocol layer (tool registration, schema validation, request/response) without needing any network or database.
@@ -441,26 +453,48 @@ The **MCP tests** use `@modelcontextprotocol/sdk`'s `InMemoryTransport` to creat
 
 ```
 src/
-  index.ts                 # Entry point - server setup and transport
+  index.ts                 # Entry point — CLI args, mode wiring, transport
+  server-factory.ts        # Centralized tool registration per mode
   db/archive.ts            # PostgreSQL archive database client
   graphql/
-    client.ts              # Generic GraphQL client
-    queries.ts             # Daemon GraphQL query definitions
-    archive-api.ts         # Archive-Node-API client (events, actions, blocks)
-    accounts-manager.ts    # Test accounts REST API client
+    client.ts              # createMinaClient factory (wraps @o1-labs/mina-sdk MinaClient)
+    accounts-manager.ts    # Tutorial-mode test accounts REST API client
   providers/
-    snapshot.ts            # Read-only provider (archive DB only)
-    tutorial.ts            # Live provider (daemon + archive + accounts)
+    snapshot.ts            # Read-only provider (archive DB only; no daemon)
+    tutorial.ts            # Tutorial provider (daemon + archive + accounts mgr)
+    live.ts                # Live provider (public network daemon, read-only)
+    live-write.ts          # Live-write provider (wallet-backed signed sends)
   tools/
-    accounts.ts            # Account tools (get_account, get_staking_ledger, etc.)
+    accounts.ts            # Account tools (get_account, get_staking_ledger)
     blocks.ts              # Block tools (get_block, list_blocks, get_best_chain)
-    transactions.ts        # Transaction tools (send_payment, search, mempool)
-    network.ts             # Network tools (sync status, genesis constants)
-    schema.ts              # Schema tools (SQL queries, schema inspection)
-    zkapps.ts              # zkApp tools (events, actions, archive blocks)
-    test-accounts.ts       # Faucet tools (acquire/release test accounts)
-  snapshots/capture.ts     # Utility to capture archive DB snapshots
+    transactions.ts        # Transaction tools (send_payment, search, mempool, status)
+    network.ts             # Network tools (sync status, genesis, archive stats)
+    schema.ts              # Archive SQL (query_archive_sql, get_archive_schema)
+    zkapps.ts              # Archive-Node-API tools (events, actions, blocks)
+    test-accounts.ts       # Faucet tools (acquire/release tutorial accounts)
+    state.ts               # describe_state aggregator
+    admin.ts               # Reset controls (freeze/unfreeze)
+    rosetta.ts             # Rosetta Data API tools (live mode)
+    wallets.ts             # list_wallets (live-write mode)
+    examples.ts            # Cookbook tools (list_examples, get_example)
+    shape.ts               # Response shapers (lite / transactions / full)
+  transports/
+    http.ts                # HTTP transport (Streamable + rate limiting + /metrics)
+  wallets/
+    loader.ts              # Wallet config + key file loader (live-write mode)
+    types.ts               # WalletRegistry / LoadedWallet types
+  session/tracker.ts       # Per-MCP-session account tracking (auto-release)
+  reset/controller.ts      # Reset-window controller (freeze/unfreeze chain resets)
+  snapshots/capture.ts     # CLI: capture archive DB snapshot
+  examples/library.ts      # Cookbook workflow library (drives examples tools)
+  networks.ts              # Public network configs (devnet/mainnet/mesa)
 ```
+
+Daemon GraphQL access goes through `@o1-labs/mina-sdk`'s `MinaClient` — typed
+methods (`getAccount`, `getBestChain`, `getBlock`, `sendPayment`, …) own the
+query strings, response shapes, and retry/timeout policy. mcp-server is
+deliberately a thin adapter: it adds tutorial-mode test-account orchestration
+and the MCP tool registration layer on top of the SDK.
 
 ## Tutorial Mode Services
 

@@ -117,8 +117,10 @@ export const EXAMPLES: Example[] = [
       { tool: "faucet", args: {}, bind: { publicKey: "$receiver_pk" } },
       {
         tool: "send_payment",
+        // SDK 0.3.0+ flattened the response — payment fields are at the top
+        // level (`hash`, `id`, `nonce`, ...), no longer under `payment`.
         args: { from: "$sender_pk", to: "$receiver_pk", amount: "1000000000", fee: "100000000" },
-        bind: { "data.sendPayment.payment.hash": "$tx_hash" },
+        bind: { hash: "$tx_hash", id: "$tx_id" },
       },
       {
         tool: "get_transaction_status",
@@ -149,11 +151,14 @@ export const EXAMPLES: Example[] = [
   },
   {
     name: "look_up_account",
-    summary: "Read an account's balance/nonce, then list its recent transactions.",
+    summary: "Read an account's balance/nonce, then list its recent transactions (as sender and as receiver).",
     mode: "tutorial",
     steps: [
       { tool: "get_account", args: { publicKey: "B62q..." }, note: "Replace publicKey with the account you care about." },
-      { tool: "search_transactions", args: { publicKey: "B62q...", limit: 25 } },
+      // search_transactions accepts `sender` / `receiver`, not `publicKey`.
+      // Use two calls when you want both sides; or pick the role you care about.
+      { tool: "search_transactions", args: { sender: "B62q...", limit: 25 }, note: "Outgoing txs." },
+      { tool: "search_transactions", args: { receiver: "B62q...", limit: 25 }, note: "Incoming txs." },
     ],
   },
   {
@@ -174,8 +179,9 @@ export const EXAMPLES: Example[] = [
     summary: "Read events for a deployed zkApp contract from the archive.",
     mode: "tutorial",
     steps: [
-      { tool: "get_events", args: { publicKey: "B62q...zkapp", from: 1 } },
-      { tool: "get_actions", args: { publicKey: "B62q...zkapp", from: 1 } },
+      // get_events / get_actions take `address`, not `publicKey`.
+      { tool: "get_events", args: { address: "B62q...zkapp", from: 1 } },
+      { tool: "get_actions", args: { address: "B62q...zkapp", from: 1 } },
     ],
   },
   {

@@ -161,13 +161,14 @@ export class LiveWriteProvider extends LiveProvider {
       this.registry.wallets.map(async (w): Promise<WalletSummary> => {
         try {
           const account = await this.getAccountLive(w.publicKey);
-          const a = (account ?? {}) as { balance?: { total?: string }; nonce?: string };
-          return {
-            alias: w.alias,
-            publicKey: w.publicKey,
-            balance: a.balance?.total ?? null,
-            nonce: a.nonce !== undefined ? Number(a.nonce) : null,
-          };
+          // `account.balance.total` is a Currency instance (SDK 0.3.0+);
+          // stringify it deterministically as nanomina rather than relying on
+          // implicit toJSON at serialization time. Keeps WalletSummary's
+          // `balance: string | null` contract honest.
+          const total = account?.balance?.total;
+          const balance = total != null ? String(total) : null;
+          const nonce = account && typeof account.nonce === "number" ? account.nonce : null;
+          return { alias: w.alias, publicKey: w.publicKey, balance, nonce };
         } catch (e) {
           return {
             alias: w.alias,
@@ -186,8 +187,11 @@ export class LiveWriteProvider extends LiveProvider {
     let daemonNonce = 0;
     try {
       const account = await this.getAccountLive(wallet.publicKey);
-      const raw = (account as { nonce?: string } | null)?.nonce;
-      if (raw !== undefined && raw !== null) daemonNonce = Number(raw);
+      // SDK's AccountData.nonce is number (since 0.3.0). Coerce just in case
+      // a fork ever returns it as a string.
+      const raw = account?.nonce;
+      if (typeof raw === "number") daemonNonce = raw;
+      else if (typeof raw === "string") daemonNonce = Number(raw);
     } catch {
       // ignore — fall back to cache. The submission will fail with a clear
       // error if the daemon really is unreachable.

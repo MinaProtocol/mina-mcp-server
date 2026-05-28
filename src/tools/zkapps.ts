@@ -12,7 +12,7 @@ export function registerZkAppTools(
 
   server.tool(
     "get_events",
-    "Get emitted events from a zkApp address. Uses the Archive-Node-API. Events are state-change notifications emitted by zkApp account updates.",
+    "[tutorial+live] Get emitted events from a zkApp address via the Archive-Node-API. Events are state-change notifications emitted by zkApp account updates. Snapshot mode does not run an Archive-Node-API and rejects this tool.",
     {
       address: z.string().describe("zkApp public key (B62...)"),
       tokenId: z.string().optional().describe("Token ID (defaults to MINA token)"),
@@ -36,7 +36,7 @@ export function registerZkAppTools(
 
   server.tool(
     "get_actions",
-    "Get dispatched actions from a zkApp address. Uses the Archive-Node-API. Actions are reducer inputs that modify zkApp state.",
+    "[tutorial+live] Get dispatched actions from a zkApp address via the Archive-Node-API. Actions are reducer inputs that modify zkApp state. Snapshot mode does not run an Archive-Node-API and rejects this tool.",
     {
       address: z.string().describe("zkApp public key (B62...)"),
       tokenId: z.string().optional().describe("Token ID"),
@@ -62,7 +62,7 @@ export function registerZkAppTools(
 
   server.tool(
     "get_archive_blocks",
-    "Get blocks from the Archive-Node-API. Includes block height, creator, timestamp, and coinbase reward.",
+    "[tutorial+live] Get finalized blocks from the Archive-Node-API (height, creator, timestamp, coinbase). Prefer this for live mode (the archive node holds canonical history) over `get_best_chain` (daemon's in-memory view including not-yet-canonical tip). Returns full block rows — use a small `limit` on busy chains.",
     {
       canonical: z.boolean().optional().describe("Only return canonical (finalized) blocks"),
       sortBy: z.enum(["BLOCKHEIGHT_ASC", "BLOCKHEIGHT_DESC"]).default("BLOCKHEIGHT_DESC").describe("Sort order"),
@@ -89,7 +89,7 @@ export function registerZkAppTools(
 
   server.tool(
     "get_network_state",
-    "Get network state from the Archive-Node-API. Returns max canonical and pending block heights.",
+    "[tutorial+live] Get network state from the Archive-Node-API: max canonical and pending block heights. (Different from `get_sync_status` which queries the daemon, and from `describe_state` which aggregates both.)",
     {},
     async () => {
       const provider = getProvider();
