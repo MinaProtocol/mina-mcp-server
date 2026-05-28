@@ -76,7 +76,9 @@ describe("Tutorial Mode Integration - MCP Tools", () => {
     const result = await client.callTool({ name: "get_sync_status", arguments: {} });
     const text = (result.content as Array<{ type: string; text: string }>)[0].text;
     const parsed = JSON.parse(text);
-    expect(parsed.daemonStatus.syncStatus).toBe("SYNCED");
+    // SDK's getDaemonStatus returns a flat DaemonStatus (no `{ daemonStatus: ... }`
+    // envelope) since 0.3.0.
+    expect(parsed.syncStatus).toBe("SYNCED");
   });
 
   it("get_genesis_constants should return constants", async () => {
@@ -127,9 +129,10 @@ describe("Tutorial Mode Integration - MCP Tools", () => {
       const text = (result.content as Array<{ type: string; text: string }>)[0].text;
       expect(text).not.toContain("Payment failed");
       const parsed = JSON.parse(text);
-      expect(parsed.payment).toBeDefined();
-      expect(parsed.payment.hash).toBeDefined();
-      paymentId = parsed.payment.id;
+      // SDK's sendPayment returns a flat SubmittedCommand (no `{ payment: ... }`
+      // envelope) since 0.3.0.
+      expect(parsed.hash).toBeDefined();
+      paymentId = parsed.id;
       expect(paymentId).toBeDefined();
     });
 
