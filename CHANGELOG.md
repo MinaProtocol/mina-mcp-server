@@ -9,6 +9,22 @@ it are summarized from the git history.
 
 ## [Unreleased]
 
+## [0.6.3] - 2026-05
+
+### Fixed
+
+- **MCP `serverInfo.version` now reflects the published package version.** The
+  server previously reported a hardcoded `0.1.0` to clients regardless of the
+  actual release; it now resolves the version from `package.json` (matching the
+  `--version` flag), so clients inspecting the `initialize` response see the
+  real version.
+
+### Changed
+
+- Republished via the GitHub Actions OIDC Trusted Publisher workflow so the npm
+  release carries a signed provenance attestation (the manual `0.6.2` bootstrap
+  publish had none).
+
 ## [0.6.1] - 2026-05
 
 ### Changed

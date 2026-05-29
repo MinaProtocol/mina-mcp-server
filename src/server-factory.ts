@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { SnapshotProvider } from "./providers/snapshot.js";
 import { TutorialProvider } from "./providers/tutorial.js";
@@ -18,6 +19,17 @@ import { registerWalletTools } from "./tools/wallets.js";
 
 export type Mode = "snapshot" | "tutorial" | "live";
 
+// Resolved from package.json at the package root (../ from dist/server-factory.js)
+// so the MCP serverInfo.version reported to clients matches the published package
+// version instead of a hardcoded literal.
+const VERSION: string = (() => {
+  try {
+    return JSON.parse(readFileSync(new URL("../package.json", import.meta.url), "utf8")).version;
+  } catch {
+    return "unknown";
+  }
+})();
+
 export type AnyProvider = SnapshotProvider | TutorialProvider | LiveProvider | LiveWriteProvider;
 
 export function buildMcpServer(provider: AnyProvider, mode: Mode): McpServer {
@@ -25,7 +37,7 @@ export function buildMcpServer(provider: AnyProvider, mode: Mode): McpServer {
   // so MCP clients can distinguish read-only live mode from the write-
   // capable variant without needing to call describe_state.
   const suffix = provider instanceof LiveWriteProvider ? "-write" : "";
-  const server = new McpServer({ name: `mina-${mode}${suffix}`, version: "0.1.0" });
+  const server = new McpServer({ name: `mina-${mode}${suffix}`, version: VERSION });
   const getProvider = () => provider;
   registerAccountTools(server, getProvider, mode);
   registerBlockTools(server, getProvider, mode);
