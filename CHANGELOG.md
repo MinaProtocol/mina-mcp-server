@@ -9,6 +9,17 @@ it are summarized from the git history.
 
 ## [Unreleased]
 
+## [0.7.1] - 2026-05
+
+### Fixed
+
+- **MCP Registry namespace casing.** The registry namespace is case-sensitive and
+  must match the GitHub org login exactly: `io.github.MinaProtocol/mina-mcp-server`
+  (was lowercase `io.github.minaprotocol/...`, which the registry rejected with a
+  403). Updated both `server.json` `name` and `package.json` `mcpName` (they must
+  match for package-ownership verification), and republished so the live npm
+  package carries the corrected `mcpName`.
+
 ## [0.7.0] - 2026-05
 
 ### Added
