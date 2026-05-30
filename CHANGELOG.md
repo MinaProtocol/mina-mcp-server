@@ -21,6 +21,12 @@ it are summarized from the git history.
   endpoint, no faucet, and no published archive dump (snapshot mode unavailable).
   Although genesis is a mainnet-state fork, the daemon reports networkID
   `mina:testnet`, so signatures use the testnet schema.
+- **`get_upgrade_status` tool (mesa-mut only)** — joins the Mesa upgrade tracker
+  (`status.json`) with the live daemon's current global slot to report the
+  hardfork phase: current vs `stopTransactionSlot` / `stopNetworkSlot`, slots/
+  minutes remaining, the Mesa genesis timestamp, and a `transactionsOpen`
+  boolean plus actionable `hints[]` (e.g. "transactions stop in ~N slots; sends
+  after that are dropped"). Registered only on `--network mesa-mut`.
 
 ### Changed
 

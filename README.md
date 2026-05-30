@@ -221,6 +221,21 @@ Each network also carries optional pointers that the MCP server doesn't proxy it
 | `mesa` | https://faucet.minaprotocol.com | https://rosetta.mina-mesa-network.gcp.o1test.net |
 | `mesa-mut` | _(none — mainnet-state fork)_ | _(none)_ |
 
+### Mesa hardfork upgrade tracking (`mesa-mut`)
+
+`mesa-mut` rehearses the **Mesa hardfork upgrade**. On `--network mesa-mut` the server
+registers an extra tool, **`get_upgrade_status`**, which joins the upgrade tracker
+([`status.json`](https://mesa-upgrade-tracker.minaprotocol.com/status.json)) with the
+live daemon's current global slot to report the phase: current slot vs
+`stopTransactionSlot` / `stopNetworkSlot`, slots/minutes remaining, the Mesa genesis
+timestamp, and a `transactionsOpen` boolean with phase-aware `hints[]`. Check
+`transactionsOpen` before submitting a send — transactions sent after
+`stopTransactionSlot` are dropped.
+
+For agent workflows, a companion Claude skill — [`.claude/skills/mesa-upgrade`](.claude/skills/mesa-upgrade/SKILL.md) —
+wraps this tool with a per-phase operator runbook (what to do / not do before, during,
+and after the fork).
+
 ### Live write mode (experimental — client-side signing)
 
 Live mode can be promoted from read-only to read+write by handing the server one or more wallet keys. Sends are signed **in this process** with [`mina-signer`](https://www.npmjs.com/package/mina-signer) and submitted as pre-signed transactions to the daemon. No daemon-side wallet, no faucet on devnet/mainnet, no key material on the wire.
