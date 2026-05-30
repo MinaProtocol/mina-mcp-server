@@ -16,6 +16,14 @@ set -euo pipefail
 
 NETWORK="${NETWORK:-devnet}"
 PORT="${PORT:-13900}"
+
+# Per-network capability flags. mesa-mut has no Rosetta endpoint, so the
+# rosetta_* tools are not registered; both mesa and mesa-mut are preflight.
+case "$NETWORK" in
+  mesa-mut)     HAS_ROSETTA=0; IS_PREFLIGHT=1 ;;
+  mesa)         HAS_ROSETTA=1; IS_PREFLIGHT=1 ;;
+  *)            HAS_ROSETTA=1; IS_PREFLIGHT=0 ;;
+esac
 BASE_URL="http://127.0.0.1:${PORT}"
 MCP_URL="${BASE_URL}/mcp"
 HEALTH_URL="${BASE_URL}/health"
@@ -101,10 +109,18 @@ echo "[tools/list]"
 TOOLS=$(mcp_call '{"jsonrpc":"2.0","id":2,"method":"tools/list"}')
 for tool in \
   describe_state get_account get_block get_archive_blocks get_best_chain \
-  get_sync_status get_mempool list_examples \
-  rosetta_status rosetta_account rosetta_block rosetta_mempool rosetta_mempool_transaction
+  get_sync_status get_mempool list_examples
 do
   require "tools/list contains $tool" 'contains "$TOOLS" "\"name\":\"$tool\""'
+done
+# Rosetta tools are registered only on networks with a Rosetta endpoint.
+ROSETTA_TOOLS="rosetta_status rosetta_account rosetta_block rosetta_mempool rosetta_mempool_transaction"
+for tool in $ROSETTA_TOOLS; do
+  if [ "$HAS_ROSETTA" = "1" ]; then
+    require "tools/list contains $tool" 'contains "$TOOLS" "\"name\":\"$tool\""'
+  else
+    require "tools/list does NOT contain $tool (no Rosetta on $NETWORK)" '! contains "$TOOLS" "\"name\":\"$tool\""'
+  fi
 done
 # Tools that must NOT be registered in live mode.
 for tool in faucet send_payment query_archive_sql list_blocks freeze_reset; do
@@ -116,16 +132,18 @@ echo "[describe_state]"
 STATE=$(mcp_call '{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"describe_state","arguments":{}}}')
 require "describe_state mode is live"      'contains "$STATE" "\\\"mode\\\": \\\"live\\\""'
 require "describe_state reports network"   "contains \"\$STATE\" \"\\\\\\\"name\\\\\\\": \\\\\\\"$NETWORK\\\\\\\"\""
-require "describe_state mentions Rosetta tool family in hints" 'contains "$STATE" "rosetta_status"'
+if [ "$HAS_ROSETTA" = "1" ]; then
+  require "describe_state mentions Rosetta tool family in hints" 'contains "$STATE" "rosetta_status"'
+fi
 SYNC_OK=0
 for s in SYNCED BOOTSTRAP CATCHUP OFFLINE; do
   if contains "$STATE" "$s"; then SYNC_OK=1; break; fi
 done
 require "describe_state reports a recognized syncStatus value" '[ "$SYNC_OK" = "1" ]'
 
-# Preflight networks (mesa today) must lead with a PREFLIGHT hint.
-if [ "$NETWORK" = "mesa" ]; then
-  require "mesa: hints[0] is the PREFLIGHT warning" 'contains "$STATE" "PREFLIGHT"'
+# Preflight networks (mesa, mesa-mut) must lead with a PREFLIGHT hint.
+if [ "$IS_PREFLIGHT" = "1" ]; then
+  require "$NETWORK: hints include the PREFLIGHT warning" 'contains "$STATE" "PREFLIGHT"'
 fi
 
 # 6. get_archive_blocks → extract a canonical stateHash → round-trip through get_block.
@@ -174,24 +192,28 @@ if [ -n "$CREATOR" ]; then
   require "get_account returns a balance for the block creator" 'contains "$ACCT" "balance"'
 fi
 
-# 7. Rosetta Data API round-trips.
-echo "[rosetta_status / block / account / mempool]"
-ROSETTA=$(mcp_call '{"jsonrpc":"2.0","id":14,"method":"tools/call","params":{"name":"rosetta_status","arguments":{}}}')
-require "rosetta_status returned current_block_identifier" 'contains "$ROSETTA" "current_block_identifier"'
-require "rosetta_status returned sync_status"               'contains "$ROSETTA" "sync_status"'
+# 7. Rosetta Data API round-trips (only on networks with a Rosetta endpoint).
+if [ "$HAS_ROSETTA" = "1" ]; then
+  echo "[rosetta_status / block / account / mempool]"
+  ROSETTA=$(mcp_call '{"jsonrpc":"2.0","id":14,"method":"tools/call","params":{"name":"rosetta_status","arguments":{}}}')
+  require "rosetta_status returned current_block_identifier" 'contains "$ROSETTA" "current_block_identifier"'
+  require "rosetta_status returned sync_status"               'contains "$ROSETTA" "sync_status"'
 
-if [ -n "$STATE_HASH" ]; then
-  RBLOCK=$(mcp_call "{\"jsonrpc\":\"2.0\",\"id\":15,\"method\":\"tools/call\",\"params\":{\"name\":\"rosetta_block\",\"arguments\":{\"hash\":\"$STATE_HASH\"}}}")
-  require "rosetta_block by hash returned a block_identifier" 'contains "$RBLOCK" "block_identifier"'
+  if [ -n "$STATE_HASH" ]; then
+    RBLOCK=$(mcp_call "{\"jsonrpc\":\"2.0\",\"id\":15,\"method\":\"tools/call\",\"params\":{\"name\":\"rosetta_block\",\"arguments\":{\"hash\":\"$STATE_HASH\"}}}")
+    require "rosetta_block by hash returned a block_identifier" 'contains "$RBLOCK" "block_identifier"'
+  fi
+
+  if [ -n "$CREATOR" ]; then
+    RACCT=$(mcp_call "{\"jsonrpc\":\"2.0\",\"id\":16,\"method\":\"tools/call\",\"params\":{\"name\":\"rosetta_account\",\"arguments\":{\"address\":\"$CREATOR\"}}}")
+    require "rosetta_account returned balances" 'contains "$RACCT" "balances"'
+  fi
+
+  RMEMPOOL=$(mcp_call '{"jsonrpc":"2.0","id":17,"method":"tools/call","params":{"name":"rosetta_mempool","arguments":{}}}')
+  require "rosetta_mempool returned transaction_identifiers" 'contains "$RMEMPOOL" "transaction_identifiers"'
+else
+  echo "[rosetta] skipped — $NETWORK has no Rosetta endpoint"
 fi
-
-if [ -n "$CREATOR" ]; then
-  RACCT=$(mcp_call "{\"jsonrpc\":\"2.0\",\"id\":16,\"method\":\"tools/call\",\"params\":{\"name\":\"rosetta_account\",\"arguments\":{\"address\":\"$CREATOR\"}}}")
-  require "rosetta_account returned balances" 'contains "$RACCT" "balances"'
-fi
-
-RMEMPOOL=$(mcp_call '{"jsonrpc":"2.0","id":17,"method":"tools/call","params":{"name":"rosetta_mempool","arguments":{}}}')
-require "rosetta_mempool returned transaction_identifiers" 'contains "$RMEMPOOL" "transaction_identifiers"'
 
 # 8. Tear down session explicitly (cleanup() also handles process kill).
 curl -sS --max-time 5 -X DELETE "$MCP_URL" -H "Mcp-Session-Id: $SESSION" >/dev/null || true

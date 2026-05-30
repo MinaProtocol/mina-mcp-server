@@ -29,9 +29,9 @@ on:
   workflow_dispatch:
     inputs:
       networks:
-        description: "Comma-separated network list (devnet,mainnet,mesa)"
+        description: "Comma-separated network list (devnet,mainnet,mesa,mesa-mut)"
         required: false
-        default: "devnet,mainnet,mesa"
+        default: "devnet,mainnet,mesa,mesa-mut"
 
 jobs:
   smoke:
@@ -42,7 +42,9 @@ jobs:
       matrix:
         # mesa stays in the matrix per maintainer's call — it has ≥1 month
         # of expected lifetime today. Drop it here when that changes.
-        network: [devnet, mainnet, mesa]
+        # mesa-mut is the Mesa hardfork-upgrade test fork (preflight); drop it
+        # once the upgrade rehearsal completes and the network is retired.
+        network: [devnet, mainnet, mesa, mesa-mut]
 
     steps:
       - uses: actions/checkout@v4

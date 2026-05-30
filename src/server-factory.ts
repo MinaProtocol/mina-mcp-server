@@ -16,6 +16,7 @@ import { registerStateTools } from "./tools/state.js";
 import { registerExampleTools } from "./tools/examples.js";
 import { registerRosettaTools } from "./tools/rosetta.js";
 import { registerWalletTools } from "./tools/wallets.js";
+import { registerUpgradeTools } from "./tools/upgrade.js";
 
 export type Mode = "snapshot" | "tutorial" | "live";
 
@@ -51,5 +52,6 @@ export function buildMcpServer(provider: AnyProvider, mode: Mode): McpServer {
   registerExampleTools(server, getProvider, mode);
   registerRosettaTools(server, getProvider, mode);
   registerWalletTools(server, getProvider, mode);
+  registerUpgradeTools(server, getProvider, mode);
   return server;
 }

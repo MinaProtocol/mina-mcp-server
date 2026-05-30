@@ -98,7 +98,7 @@ MODES
 | Flag | Env var | Values (default) |
 |---|---|---|
 | `--mode` | `MINA_MCP_MODE` | `live` / `tutorial` / `snapshot` (`snapshot`) |
-| `--network` | `MINA_MCP_NETWORK` | `devnet` / `mainnet` / `mesa` (live only) |
+| `--network` | `MINA_MCP_NETWORK` | `devnet` / `mainnet` / `mesa` / `mesa-mut` (live only) |
 | `--transport` | `MINA_MCP_TRANSPORT` | `stdio` / `http` (`stdio`) |
 | `--wallets` | `MINA_MCP_WALLETS` | path to `wallets.json` (live-write) |
 | `--allow-mainnet-writes` | `MINA_MCP_ALLOW_MAINNET_WRITES=1` | opt-in gate for mainnet sends |
@@ -194,12 +194,13 @@ Endpoints are best-effort services without SLAs and URLs are subject to change. 
 | `devnet` | stable | Long-lived dev network. Expected to stick around. |
 | `mainnet` | stable | Production. Expected to stick around. |
 | `mesa` | **preflight** | Preview/staging network. **May be reset, renamed, or retired without notice.** Endpoints, archive-dump filenames, and even the network identity itself are not guaranteed stable. |
+| `mesa-mut` | **preflight** | [Mesa Upgrade Test](https://mesa-upgrade-tracker.minaprotocol.com/status.json) — a fork of mainnet state for rehearsing the Mesa hardfork. **Tied to the upgrade rehearsal; will be reset/retired without notice.** Genesis is a mainnet-state fork, but the daemon reports networkID `mina:testnet` (testnet signature schema). No Rosetta endpoint, no faucet, and no published archive dump (snapshot mode unavailable). |
 
 When a `LiveProvider` is constructed against a preflight network, the server emits a `[WARN] Network '<name>' is a PREFLIGHT network…` line at startup and prepends a `PREFLIGHT` hint to `describe_state`'s `hints[]` — so any LLM consuming the output sees the caveat before reasoning about the data. If you build downstream automation against a preflight network, treat any data you gather as ephemeral and have a fallback to a stable network.
 
 ### Rosetta Data API (live mode)
 
-When a live-mode network has a Rosetta endpoint configured (all three public networks do today), the server registers five Rosetta Data API tools alongside the daemon/archive ones. These return responses in **standardized Rosetta format** — useful for LLMs and integrations that already speak Rosetta:
+When a live-mode network has a Rosetta endpoint configured (`devnet`, `mainnet`, and `mesa` do today; `mesa-mut` does not), the server registers five Rosetta Data API tools alongside the daemon/archive ones. On a network without a Rosetta endpoint the `rosetta_*` tools are not registered at all, so the advertised tool list reflects what the network can actually do. These return responses in **standardized Rosetta format** — useful for LLMs and integrations that already speak Rosetta:
 
 | Tool | Rosetta endpoint | Use |
 |---|---|---|
@@ -218,6 +219,22 @@ Each network also carries optional pointers that the MCP server doesn't proxy it
 | `devnet` | https://faucet.minaprotocol.com | https://devnet-rosetta.gcp.o1test.net |
 | `mainnet` | _(none — exchanges only)_ | https://mainnet-rosetta.gcp.o1test.net |
 | `mesa` | https://faucet.minaprotocol.com | https://rosetta.mina-mesa-network.gcp.o1test.net |
+| `mesa-mut` | _(none — mainnet-state fork)_ | _(none)_ |
+
+### Mesa hardfork upgrade tracking (`mesa-mut`)
+
+`mesa-mut` rehearses the **Mesa hardfork upgrade**. On `--network mesa-mut` the server
+registers an extra tool, **`get_upgrade_status`**, which joins the upgrade tracker
+([`status.json`](https://mesa-upgrade-tracker.minaprotocol.com/status.json)) with the
+live daemon's current global slot to report the phase: current slot vs
+`stopTransactionSlot` / `stopNetworkSlot`, slots/minutes remaining, the Mesa genesis
+timestamp, and a `transactionsOpen` boolean with phase-aware `hints[]`. Check
+`transactionsOpen` before submitting a send — transactions sent after
+`stopTransactionSlot` are dropped.
+
+For agent workflows, a companion Claude skill — [`.claude/skills/mesa-upgrade`](.claude/skills/mesa-upgrade/SKILL.md) —
+wraps this tool with a per-phase operator runbook (what to do / not do before, during,
+and after the fork).
 
 ### Live write mode (experimental — client-side signing)
 

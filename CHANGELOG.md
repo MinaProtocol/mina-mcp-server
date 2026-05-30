@@ -9,6 +9,34 @@ it are summarized from the git history.
 
 ## [Unreleased]
 
+## [0.7.0] - 2026-05
+
+### Added
+
+- **New live network: `mesa-mut`** (Mesa Upgrade Test) — the fork of mainnet
+  state used to rehearse the Mesa hardfork upgrade
+  (`https://mesa-upgrade-tracker.minaprotocol.com/status.json`). Use with
+  `--mode live --network mesa-mut`. Classified **preflight** (ephemeral; reset/
+  retired without notice). Daemon + Archive-Node-API endpoints only — no Rosetta
+  endpoint, no faucet, and no published archive dump (snapshot mode unavailable).
+  Although genesis is a mainnet-state fork, the daemon reports networkID
+  `mina:testnet`, so signatures use the testnet schema.
+- **`get_upgrade_status` tool (mesa-mut only)** — joins the Mesa upgrade tracker
+  (`status.json`) with the live daemon's current global slot to report the
+  hardfork phase: current vs `stopTransactionSlot` / `stopNetworkSlot`, slots/
+  minutes remaining, the Mesa genesis timestamp, and a `transactionsOpen`
+  boolean plus actionable `hints[]` (e.g. "transactions stop in ~N slots; sends
+  after that are dropped"). Registered only on `--network mesa-mut`.
+
+### Changed
+
+- **`rosetta_*` tools are now registered only when the active network actually
+  has a Rosetta endpoint.** Previously they were always registered in live mode
+  and returned a "not available" message at call time on networks without
+  Rosetta. The advertised tool list now reflects real per-network capability
+  (e.g. `mesa-mut` lists 15 tools instead of 20). `NetworkConfig.archiveDumpPrefix`
+  / `archiveDumpCadence` are now optional for networks without a published dump.
+
 ## [0.6.3] - 2026-05
 
 ### Fixed

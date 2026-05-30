@@ -167,6 +167,81 @@ describe("MCP Server - Live Mode", () => {
     });
   });
 
+  describe("upgrade status (mesa-mut)", () => {
+    const TRACKER = {
+      currentPhase: "pre-upgrade",
+      network: "mainnet",
+      lastUpdated: "2026-05-28T23:11:00Z",
+      slots: { stopTransactionSlot: 2680, stopNetworkSlot: 2780 },
+      autoHardForkDelta: 60,
+      mesaGenesisTimestamp: "2026-06-03T18:00:00Z",
+    };
+
+    async function withMesaMut(
+      slot: string,
+      run: (ctx: LiveMcpTestContext) => Promise<void>
+    ): Promise<void> {
+      await ctx.cleanup();
+      const mutCtx = await setupLiveMcp("mesa-mut");
+      const fetchMock = vi.fn().mockResolvedValue({ ok: true, json: async () => TRACKER });
+      vi.stubGlobal("fetch", fetchMock);
+      try {
+        (mutCtx.mockClient.executeQuery as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
+          daemonStatus: { consensusTimeNow: { globalSlot: slot }, blockchainLength: 296681 },
+        });
+        await run(mutCtx);
+      } finally {
+        vi.unstubAllGlobals();
+        await mutCtx.cleanup();
+      }
+    }
+
+    async function callUpgrade(c: LiveMcpTestContext) {
+      const result = await c.client.callTool({ name: "get_upgrade_status", arguments: {} });
+      const text = (result.content as Array<{ type: string; text: string }>)[0].text;
+      return JSON.parse(text);
+    }
+
+    it("joins the tracker with the live slot and reports transactions OPEN before stopTransactionSlot", async () => {
+      await withMesaMut("952", async (c) => {
+        const s = await callUpgrade(c);
+        expect(s.network).toBe("mesa-mut");
+        expect(s.trackerPhase).toBe("pre-upgrade");
+        expect(s.transactionsOpen).toBe(true);
+        expect(s.currentSlot).toBe(952);
+        expect(s.stopTransactionSlot).toBe(2680);
+        expect(s.slotsUntilStopTransaction).toBe(2680 - 952);
+        expect(s.mesaGenesisTimestamp).toBe("2026-06-03T18:00:00Z");
+        expect(s.hints.some((h: string) => h.includes("Transactions are OPEN"))).toBe(true);
+        expect(s.hints.some((h: string) => h.includes("PREFLIGHT"))).toBe(true);
+      });
+    });
+
+    it("reports transactions STOPPED once the live slot passes stopTransactionSlot", async () => {
+      await withMesaMut("2700", async (c) => {
+        const s = await callUpgrade(c);
+        expect(s.transactionsOpen).toBe(false);
+        expect(s.livePhase).toMatch(/transactions stopped/);
+        expect(s.slotsUntilStopNetwork).toBe(2780 - 2700);
+        expect(s.hints.some((h: string) => h.includes("STOPPED"))).toBe(true);
+      });
+    });
+
+    it("reports network HALTED once the live slot passes stopNetworkSlot", async () => {
+      await withMesaMut("2800", async (c) => {
+        const s = await callUpgrade(c);
+        expect(s.transactionsOpen).toBe(false);
+        expect(s.livePhase).toMatch(/network halted/);
+        expect(s.hints.some((h: string) => h.includes("HALTED"))).toBe(true);
+      });
+    });
+
+    it("is not registered on networks without an upgrade tracker (devnet)", async () => {
+      const tools = await ctx.client.listTools();
+      expect(tools.tools.map((t) => t.name)).not.toContain("get_upgrade_status");
+    });
+  });
+
   describe("rosetta tools", () => {
     it("rosetta_status returns the underlying client response", async () => {
       const fixture = { current_block_identifier: { index: 7, hash: "h7" }, sync_status: { synced: true } };

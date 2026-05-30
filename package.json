@@ -1,6 +1,6 @@
 {
   "name": "@o1-labs/mina-mcp-server",
-  "version": "0.6.3",
+  "version": "0.7.0",
   "description": "MCP server for Mina Protocol daemon and archive node",
   "mcpName": "io.github.minaprotocol/mina-mcp-server",
   "type": "module",
