@@ -1,0 +1,45 @@
+name: Publish to MCP Registry
+
+# Publishes server.json to the official MCP Registry
+# (registry.modelcontextprotocol.io) under the io.github.minaprotocol namespace.
+#
+# Auth: GitHub Actions OIDC (`mcp-publisher login github-oidc`). Because this
+# workflow runs in the MinaProtocol/mina-mcp-server repo, the OIDC token's
+# repository_owner claim (`minaprotocol`) authorizes the io.github.minaprotocol/*
+# namespace — no token or interactive login required.
+#
+# The registry only stores metadata and verifies that the referenced npm package
+# (@o1-labs/mina-mcp-server) carries a matching `mcpName` field. The npm package
+# itself is published by the separate `release.yml` workflow, so this workflow
+# only runs the registry publish step and must run AFTER the npm package for the
+# tagged version is live.
+#
+# Triggers:
+#   - push of a `v*` tag (runs after a release is cut)
+#   - manual dispatch (to (re)publish the current server.json on demand)
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write # required for OIDC authentication to the registry
+      contents: read
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install mcp-publisher
+        run: |
+          curl -L "https://github.com/modelcontextprotocol/registry/releases/latest/download/mcp-publisher_$(uname -s | tr '[:upper:]' '[:lower:]')_$(uname -m | sed 's/x86_64/amd64/;s/aarch64/arm64/').tar.gz" | tar xz mcp-publisher
+
+      - name: Authenticate to MCP Registry (GitHub OIDC)
+        run: ./mcp-publisher login github-oidc
+
+      - name: Publish server.json to MCP Registry
+        run: ./mcp-publisher publish
