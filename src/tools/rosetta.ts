@@ -38,6 +38,11 @@ export function registerRosettaTools(
   mode: Mode
 ) {
   if (mode !== "live") return;
+  // Only advertise rosetta_* tools when the active network actually has a
+  // Rosetta endpoint configured. Networks without one (e.g. mesa-mut) would
+  // otherwise list tools that always return "not available". This mirrors the
+  // registration-time capability filtering used for DB/account-backed tools.
+  if (!rosettaOf(getProvider())) return;
 
   server.tool(
     "rosetta_status",

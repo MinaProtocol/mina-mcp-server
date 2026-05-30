@@ -2,8 +2,8 @@ import { describe, it, expect } from "vitest";
 import { NETWORKS, resolveNetwork, preflightWarning } from "../../src/networks.js";
 
 describe("public network table", () => {
-  it("exposes devnet, mainnet and mesa", () => {
-    expect(Object.keys(NETWORKS).sort()).toEqual(["devnet", "mainnet", "mesa"]);
+  it("exposes devnet, mainnet, mesa and mesa-mut", () => {
+    expect(Object.keys(NETWORKS).sort()).toEqual(["devnet", "mainnet", "mesa", "mesa-mut"]);
   });
 
   it("every network has both daemon GraphQL and archive-node-api endpoints", () => {
@@ -21,18 +21,27 @@ describe("public network table", () => {
     }
   });
 
-  it("devnet and mainnet are stable; mesa is preflight", () => {
+  it("devnet and mainnet are stable; mesa and mesa-mut are preflight", () => {
     expect(NETWORKS.devnet.stability).toBe("stable");
     expect(NETWORKS.mainnet.stability).toBe("stable");
     expect(NETWORKS.mesa.stability).toBe("preflight");
+    expect(NETWORKS["mesa-mut"].stability).toBe("preflight");
   });
 
-  it("every network declares an archive-dump prefix and cadence", () => {
+  it("networks that declare an archive-dump prefix also declare a cadence", () => {
     for (const cfg of Object.values(NETWORKS)) {
+      // archiveDumpPrefix is optional — networks without a published dump
+      // (e.g. mesa-mut) omit it, and snapshot mode is unavailable for them.
+      if (cfg.archiveDumpPrefix === undefined) {
+        expect(cfg.archiveDumpCadence).toBeUndefined();
+        continue;
+      }
       expect(cfg.archiveDumpPrefix.length).toBeGreaterThan(0);
       expect(["daily", "twice-daily"]).toContain(cfg.archiveDumpCadence);
     }
     expect(NETWORKS.mesa.archiveDumpCadence).toBe("twice-daily");
+    // mesa-mut has no published archive dump.
+    expect(NETWORKS["mesa-mut"].archiveDumpPrefix).toBeUndefined();
   });
 
   it("devnet and mesa declare a faucet URL; mainnet does not", () => {
@@ -41,8 +50,14 @@ describe("public network table", () => {
     expect(NETWORKS.mainnet.faucetUrl).toBeUndefined();
   });
 
-  it("every network declares a Mina-Rosetta endpoint + Rosetta network identifier", () => {
+  it("networks that declare a Mina-Rosetta endpoint also declare its network identifier", () => {
     for (const cfg of Object.values(NETWORKS)) {
+      // rosettaUrl is optional — networks without a published Rosetta endpoint
+      // (e.g. mesa-mut) omit it, and rosetta_* tools are not registered.
+      if (cfg.rosettaUrl === undefined) {
+        expect(cfg.rosettaNetwork).toBeUndefined();
+        continue;
+      }
       expect(cfg.rosettaUrl).toMatch(/^https?:\/\//);
       expect(typeof cfg.rosettaNetwork).toBe("string");
       expect(cfg.rosettaNetwork!.length).toBeGreaterThan(0);
@@ -52,6 +67,8 @@ describe("public network table", () => {
     expect(NETWORKS.mesa.rosettaNetwork).toBe("testnet");
     expect(NETWORKS.devnet.rosettaNetwork).toBe("devnet");
     expect(NETWORKS.mainnet.rosettaNetwork).toBe("mainnet");
+    // mesa-mut has no published Rosetta endpoint.
+    expect(NETWORKS["mesa-mut"].rosettaUrl).toBeUndefined();
   });
 
   it("preflightWarning returns a warning for preflight networks and null otherwise", () => {
@@ -61,12 +78,17 @@ describe("public network table", () => {
     expect(w).not.toBeNull();
     expect(w).toMatch(/PREFLIGHT/);
     expect(w).toMatch(/mesa/);
+    const wMut = preflightWarning(NETWORKS["mesa-mut"]);
+    expect(wMut).not.toBeNull();
+    expect(wMut).toMatch(/PREFLIGHT/);
+    expect(wMut).toMatch(/mesa-mut/);
   });
 
   it("resolveNetwork returns the matching entry", () => {
     expect(resolveNetwork("devnet").name).toBe("devnet");
     expect(resolveNetwork("mainnet").name).toBe("mainnet");
     expect(resolveNetwork("mesa").name).toBe("mesa");
+    expect(resolveNetwork("mesa-mut").name).toBe("mesa-mut");
   });
 
   it("resolveNetwork throws on unknown name with the known list", () => {

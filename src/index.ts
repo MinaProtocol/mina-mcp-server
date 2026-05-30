@@ -44,7 +44,8 @@ MODES
 
 OPTIONS
   --mode <live|tutorial|snapshot>   Operating mode (default: snapshot).
-  --network <devnet|mainnet|mesa>   Public network (live mode only).
+  --network <devnet|mainnet|mesa|mesa-mut>
+                                    Public network (live mode only).
   --transport <stdio|http>          MCP transport (default: stdio).
   --wallets <path>                  wallets.json for live-write mode (live only).
   --allow-mainnet-writes            Required opt-in to submit on mainnet.
@@ -136,7 +137,7 @@ function parseArgs(): ParsedArgs {
 
   if (mode === "live" && !network) {
     console.error(
-      `Mode 'live' requires --network <devnet|mainnet|mesa> (or MINA_MCP_NETWORK).`
+      `Mode 'live' requires --network <devnet|mainnet|mesa|mesa-mut> (or MINA_MCP_NETWORK).`
     );
     process.exit(1);
   }

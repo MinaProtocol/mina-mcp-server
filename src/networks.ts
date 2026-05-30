@@ -2,7 +2,7 @@
 // These are best-effort services without SLAs — see the source-of-truth doc
 // for the canonical URLs (subject to change at any time).
 
-export type NetworkName = "devnet" | "mainnet" | "mesa";
+export type NetworkName = "devnet" | "mainnet" | "mesa" | "mesa-mut";
 
 // "stable"   — long-lived network we expect to keep around (devnet, mainnet).
 // "preflight" — short-lived ops/staging network. May be renamed, reset, or
@@ -38,9 +38,11 @@ export interface NetworkConfig {
   // Snapshot mode (docker-compose.snapshot.yml --profile download): the dump
   // is fetched from
   //   https://storage.googleapis.com/mina-archive-dumps/${archiveDumpPrefix}-${date}_${hour}.sql.tar.gz
-  // The prefix is the ONLY thing that differs per network.
-  archiveDumpPrefix: string;
-  archiveDumpCadence: ArchiveDumpCadence;
+  // The prefix is the ONLY thing that differs per network. Optional: networks
+  // without a published archive dump (e.g. short-lived upgrade-test forks) omit
+  // these, and snapshot mode is simply unavailable for them.
+  archiveDumpPrefix?: string;
+  archiveDumpCadence?: ArchiveDumpCadence;
 }
 
 export const NETWORKS: Record<NetworkName, NetworkConfig> = {
@@ -88,6 +90,23 @@ export const NETWORKS: Record<NetworkName, NetworkConfig> = {
     // mesa graduates. Document this prominently anywhere it's surfaced to users.
     archiveDumpPrefix: "hetzner-pre-mesa-1-archive-dump",
     archiveDumpCadence: "twice-daily",
+  },
+  "mesa-mut": {
+    name: "mesa-mut",
+    description:
+      "Mina Mesa Upgrade Test (MUT) — a fork of mainnet state used to rehearse the Mesa " +
+      "hardfork upgrade (see https://mesa-upgrade-tracker.minaprotocol.com/status.json). " +
+      "Preflight: short-lived and tied to the upgrade rehearsal — it may be reset or retired " +
+      "without notice, and endpoints are not guaranteed stable. Although the genesis is a " +
+      "mainnet-state fork, the daemon reports networkID 'mina:testnet', so signatures use the " +
+      "testnet schema (same as devnet/mesa).",
+    stability: "preflight",
+    daemonGraphql: "https://plain-1-graphql.mesa-mut.minaprotocol.com/graphql",
+    archiveNodeApi: "https://archive-node-api.mesa-mut.minaprotocol.com",
+    // No faucet endpoint published for mesa-mut (genesis is a mainnet-state
+    // fork, so pre-existing mainnet accounts carry over).
+    // No Mina-Rosetta endpoint published — rosetta_* tools are not registered.
+    // No public archive dump published — snapshot mode is unavailable.
   },
 };
 
