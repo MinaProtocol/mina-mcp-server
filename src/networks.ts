@@ -27,6 +27,11 @@ export interface NetworkConfig {
   // describe_state lets an LLM hand a human the right link in one tool call.
   // Mainnet has none — real MINA is acquired via exchanges.
   faucetUrl?: string;
+  // Optional extra guidance appended to the faucet hint — e.g. which button to
+  // click on the shared form, or whether funding is currently available. The
+  // faucet.minaprotocol.com form has per-network buttons; some are gated
+  // (e.g. mesa-mut's stays disabled until the network forks).
+  faucetNote?: string;
   // Mina-Rosetta endpoint for this network. Standard Rosetta API
   // (Coinbase spec) — usable for exchange-style integrations and
   // construction flows.
@@ -103,10 +108,16 @@ export const NETWORKS: Record<NetworkName, NetworkConfig> = {
     stability: "preflight",
     daemonGraphql: "https://plain-1-graphql.mesa-mut.minaprotocol.com/graphql",
     archiveNodeApi: "https://archive-node-api.mesa-mut.minaprotocol.com",
-    // Shared faucet UI; "Mesa mut" is one of the selectable networks in the form.
-    // (The genesis is also a mainnet-state fork, so pre-existing mainnet accounts
-    // carry over — but the faucet is available for funding fresh test keys too.)
+    // Shared faucet UI. mesa-mut is funded via the "Trailblazer (mesa)" button,
+    // which stays GREYED OUT until mesa-mut forks (genesis 2026-06-03). Pre-fork
+    // the faucet can't fund mesa-mut — use accounts carried over from the
+    // mainnet-state fork instead. The form's four buttons are: devnet, mesa,
+    // Trailblazer (berkeley), and Trailblazer (mesa).
     faucetUrl: "https://faucet.minaprotocol.com",
+    faucetNote:
+      'On the form pick the "Trailblazer (mesa)" button. It is greyed out ' +
+      "until mesa-mut forks, so faucet funding is unavailable before the fork; " +
+      "until then, use accounts carried over from the mainnet-state fork.",
     // No Mina-Rosetta endpoint published — rosetta_* tools are not registered.
     // No public archive dump published — snapshot mode is unavailable.
   },
