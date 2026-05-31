@@ -103,8 +103,10 @@ export const NETWORKS: Record<NetworkName, NetworkConfig> = {
     stability: "preflight",
     daemonGraphql: "https://plain-1-graphql.mesa-mut.minaprotocol.com/graphql",
     archiveNodeApi: "https://archive-node-api.mesa-mut.minaprotocol.com",
-    // No faucet endpoint published for mesa-mut (genesis is a mainnet-state
-    // fork, so pre-existing mainnet accounts carry over).
+    // Shared faucet UI; "Mesa mut" is one of the selectable networks in the form.
+    // (The genesis is also a mainnet-state fork, so pre-existing mainnet accounts
+    // carry over — but the faucet is available for funding fresh test keys too.)
+    faucetUrl: "https://faucet.minaprotocol.com",
     // No Mina-Rosetta endpoint published — rosetta_* tools are not registered.
     // No public archive dump published — snapshot mode is unavailable.
   },
