@@ -44,10 +44,16 @@ describe("public network table", () => {
     expect(NETWORKS["mesa-mut"].archiveDumpPrefix).toBeUndefined();
   });
 
-  it("devnet and mesa declare a faucet URL; mainnet does not", () => {
+  it("devnet, mesa and mesa-mut declare a faucet URL; mainnet does not", () => {
     expect(NETWORKS.devnet.faucetUrl).toMatch(/^https?:\/\//);
     expect(NETWORKS.mesa.faucetUrl).toMatch(/^https?:\/\//);
+    expect(NETWORKS["mesa-mut"].faucetUrl).toMatch(/^https?:\/\//);
     expect(NETWORKS.mainnet.faucetUrl).toBeUndefined();
+  });
+
+  it("mesa-mut carries a faucet note about its gated Trailblazer (mesa) button", () => {
+    expect(NETWORKS["mesa-mut"].faucetNote).toMatch(/Trailblazer \(mesa\)/);
+    expect(NETWORKS["mesa-mut"].faucetNote).toMatch(/greyed out|grey|disabled|until.*fork/i);
   });
 
   it("networks that declare a Mina-Rosetta endpoint also declare its network identifier", () => {

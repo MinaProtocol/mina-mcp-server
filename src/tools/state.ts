@@ -8,10 +8,11 @@ import { STDIO_SESSION_ID } from "../session/tracker.js";
 
 function faucetHint(cfg: NetworkConfig): string | null {
   if (!cfg.faucetUrl) return null;
-  return (
+  let hint =
     `If a human user needs test MINA on ${cfg.name}, direct them to ${cfg.faucetUrl} — ` +
-    `it is a web form, not an API, so the agent cannot call it directly.`
-  );
+    `it is a web form, not an API, so the agent cannot call it directly.`;
+  if (cfg.faucetNote) hint += ` ${cfg.faucetNote}`;
+  return hint;
 }
 
 function rosettaHint(cfg: NetworkConfig): string | null {
