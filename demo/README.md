@@ -35,3 +35,26 @@ npm run demo:honesty
 `setup-local.sh` expects the sibling repos at `../../mina-verify` (with the
 `mina-verify-wasm` crate built) and `../mina-sdk-js`. In production none of this is
 needed — `npm install mina-verify-wasm` is the whole setup.
+
+## Presenting it
+
+[`sample-output.txt`](sample-output.txt) is a captured run, if you'd rather show the
+result than wait ~2.5 min for two live proof checks.
+
+Talking points:
+
+- **The problem.** Today an exchange, wallet, or agent reading a Mina node has to *trust*
+  the node. A compromised or buggy endpoint can report a wrong balance / ledger and the
+  client can't tell.
+- **What act 1 shows.** `verify_chain_tip` doesn't ask the node "are you honest?" — it
+  checks the chain's **SNARK proof** itself. One ~22 KB recursive proof attests the entire
+  history to genesis. That's Mina's superpower: a phone-sized client can verify the whole
+  chain.
+- **What act 2 shows.** We put a lying proxy in front of the real node. A trusting client
+  sees a normal response. `check_endpoint_honesty` verifies the canonical block's proof
+  and **catches the lie**, naming the field. Trust in the data source drops to zero.
+- **Why it matters for agents.** An MCP-driven AI can now make this a reflex: verify before
+  acting on chain data, and refuse endpoints that don't check out.
+
+Caveat to mention: verification is single-threaded today (~tens of seconds); a threaded
+backend is the planned perf follow-up. Correctness is done; speed is an optimization.
