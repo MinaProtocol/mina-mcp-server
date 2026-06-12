@@ -51,7 +51,7 @@ async function fetchPrecomputedBlock(
   return res.text();
 }
 
-const network = z
+const networkArg = z
   .enum(["devnet", "mainnet"])
   .optional()
   .describe("Override the verification-key network. Defaults to the active network.");
@@ -103,7 +103,7 @@ export function registerVerifyTools(
     {
       height: z.number().optional().describe("Verify this height (requires stateHash too)."),
       stateHash: z.string().optional().describe("Verify this state hash (requires height too)."),
-      network,
+      network: networkArg,
     },
     async ({ height, stateHash, network: net }) => {
       const provider = verifiableLive(getProvider());
@@ -170,7 +170,7 @@ export function registerVerifyTools(
     {
       height: z.number().optional().describe("Check this height (requires stateHash too)."),
       stateHash: z.string().optional().describe("Check this state hash (requires height too)."),
-      network,
+      network: networkArg,
     },
     async ({ height, stateHash, network: net }) => {
       const provider = verifiableLive(getProvider());
