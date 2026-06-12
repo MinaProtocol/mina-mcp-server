@@ -50,7 +50,7 @@
     "test:unit": "vitest run test/unit",
     "test:mcp": "vitest run test/mcp",
     "test:integration": "vitest run test/integration --test-timeout 120000",
-    "demo:honesty": "tsx demo/honesty-demo.mts",
+    "demo:honesty": "npx tsx demo/honesty-demo.mts",
     "prepublishOnly": "npm run build"
   },
   "dependencies": {
