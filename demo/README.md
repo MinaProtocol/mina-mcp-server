@@ -7,20 +7,24 @@ state with cryptography instead of trusting the endpoint.
 npm run demo:honesty
 ```
 
-Two acts, both through the real MCP server + tools (in-memory transport), exactly as
+Three acts, all through the real MCP server + tools (in-memory transport), exactly as
 an agent would call them:
 
 1. **`verify_chain_tip`** against live **devnet** → `VERIFIED ✓`. It downloads the
    canonical precomputed block and checks its Pickles/kimchi SNARK proof; a valid proof
    attests the entire chain back to genesis. No trust in the daemon or the block bucket.
 
-2. **`check_endpoint_honesty`** against a **dishonest endpoint** → `DISHONEST ✗`. The
+2. **`check_endpoint_honesty`** against the **honest** devnet daemon → `HONEST ✓`. Every
+   field the daemon reports matches what the proof attests.
+
+3. **`check_endpoint_honesty`** against a **dishonest endpoint** → `DISHONEST ✗`. The
    demo starts a tampering proxy (`demo/tampering-proxy.mts`) that forwards to the real
    devnet daemon but **lies about the staged-ledger hash**. The tool verifies the
    canonical block's proof, compares, and catches the lie — naming the exact field.
 
-Expect each act to take **tens of seconds**: it is running a real zero-knowledge proof
-verification, single-threaded. The wait is the point — it's verifying, not trusting.
+Expect each act to take **tens of seconds** (so ~2–3 min total): each runs a real
+zero-knowledge proof verification, single-threaded. The wait is the point — it's
+verifying, not trusting.
 
 ## Requirements
 

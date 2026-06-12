@@ -7,31 +7,46 @@ A verifying block's SNARK attests the whole chain to genesis; no data source is 
   1. Verify the live devnet chain tip is cryptographically valid
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
   → calling verify_chain_tip (verifying a real SNARK proof, ~tens of seconds)…
-  ⏱  78s
+  ⏱  69s
 
 VERIFIED ✓ — the devnet chain tip is cryptographically valid.
 
-  height              527294
-  state_hash          3NKGE6DEZffuZ2BsyuGCkyfRW4ma3UFAFNkZyRqRbaxyKb8yd57B
-  previous_state_hash 3NKgJs8Bq6hwt4basirLMS42U8b3oQfBFPzhz4q6shpXLLD1Togd
-  staged_ledger_hash  jxGiH3wn3UDyeFVkZDe5J2UxExkcokxMhVUh7ZJ4Cj2v8BPNrSv
+  height              527302
+  state_hash          3NLRin81RHa5g3HfRCV5cxiDw3nB2yNda3tN9wz8GfywN9Eed1NX
+  previous_state_hash 3NLSgZbNTqGEc9Vgp4SwasFrAEpYUXwhk1tRBLR9RXrjHQ2TEnsH
+  staged_ledger_hash  jxrNqxCyarVzKxdwCFmg1GEy33dwg8bLpMVU3yNiefM5W5kqgh5
 
 Its Pickles/kimchi SNARK proof verifies, which by recursion attests every ancestor back to genesis. No trust in the daemon or the block bucket was required.
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-  2. Catch a DISHONEST endpoint (proxy that lies about the staged-ledger hash)
+  2. Check an HONEST endpoint (the real devnet daemon) → expect HONEST
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-  (started a tampering proxy at http://127.0.0.1:36857/graphql — forwards to devnet, lies about stagedLedgerHash)
+  → calling check_endpoint_honesty (verifying a real SNARK proof, ~tens of seconds)…
+  ⏱  62s
+
+HONEST ✓ — the devnet daemon's claims match the proof-verified block.
+
+  height              527302
+  state_hash          3NLRin81RHa5g3HfRCV5cxiDw3nB2yNda3tN9wz8GfywN9Eed1NX
+  staged_ledger_hash  jxrNqxCyarVzKxdwCFmg1GEy33dwg8bLpMVU3yNiefM5W5kqgh5
+
+Every field the daemon reported agrees with what the SNARK proof attests.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  3. Catch a DISHONEST endpoint (proxy that lies about the staged-ledger hash)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  (started a tampering proxy at http://127.0.0.1:37445/graphql — forwards to devnet, lies about stagedLedgerHash)
 
   → calling check_endpoint_honesty (verifying a real SNARK proof, ~tens of seconds)…
-  ⏱  70s
+  ⏱  59s
 
 DISHONEST ✗ — the devnet daemon's claims disagree with the proof-verified block:
 
-  stagedLedgerHash: daemon says "jx1111111111111111111111111111111111111111111111LIE", proof says "jxGiH3wn3UDyeFVkZDe5J2UxExkcokxMhVUh7ZJ4Cj2v8BPNrSv"
+  stagedLedgerHash: daemon says "jx1111111111111111111111111111111111111111111111LIE", proof says "jxrNqxCyarVzKxdwCFmg1GEy33dwg8bLpMVU3yNiefM5W5kqgh5"
 
 The proof-attested values are authoritative. Treat this endpoint's data as untrustworthy.
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
   The agent verified a real chain proof, then caught a lying endpoint —
   using only cryptography, with zero trust in the data source.
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+

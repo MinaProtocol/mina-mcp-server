@@ -49,8 +49,12 @@ async function main() {
   const honest = await mcpClientFor(NETWORKS.devnet);
   console.log(await callTool(honest, "verify_chain_tip"));
 
-  // 2. A dishonest endpoint: same daemon, but a proxy that lies about the ledger hash.
-  banner(2, "Catch a DISHONEST endpoint (proxy that lies about the staged-ledger hash)");
+  // 2. The honest daemon again: its claims should MATCH the proof → HONEST.
+  banner(2, "Check an HONEST endpoint (the real devnet daemon) → expect HONEST");
+  console.log(await callTool(honest, "check_endpoint_honesty"));
+
+  // 3. A dishonest endpoint: same daemon, but a proxy that lies about the ledger hash.
+  banner(3, "Catch a DISHONEST endpoint (proxy that lies about the staged-ledger hash)");
   const proxy = await startTamperingProxy(NETWORKS.devnet.daemonGraphql);
   console.log(`  (started a tampering proxy at ${proxy.url} — forwards to devnet, lies about stagedLedgerHash)\n`);
   const tamperedCfg: NetworkConfig = { ...NETWORKS.devnet, daemonGraphql: proxy.url };
