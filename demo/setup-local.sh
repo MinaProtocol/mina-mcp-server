@@ -2,15 +2,16 @@
 # Wire the local (unpublished) verification packages into this MCP checkout so the
 # demo runs before mina-verify-wasm / @o1-labs/mina-sdk are on npm.
 #
-# Expects sibling checkouts:
-#   ../../mina-verify        (with crates/mina-verify-wasm)
+# Expects sibling checkouts next to this repo:
+#   ../mina-verify           (with crates/mina-verify-wasm)
 #   ../mina-sdk-js           (the SDK, on the verify branch)
+# Override with MINA_VERIFY_DIR / MINA_SDK_DIR if they live elsewhere.
 #
 # In production this whole script is unnecessary: `npm install mina-verify-wasm`.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 MCP="$PWD"
-VERIFY="${MINA_VERIFY_DIR:-$MCP/../../mina-verify}"
+VERIFY="${MINA_VERIFY_DIR:-$MCP/../mina-verify}"
 SDK="${MINA_SDK_DIR:-$MCP/../mina-sdk-js}"
 WASM_PKG="$VERIFY/crates/mina-verify-wasm/pkg"
 
@@ -31,7 +32,12 @@ TARBALL="$(cd "$SDK" && npm pack --silent)"
 tar -xzf "$SDK/$TARBALL" -C "$DEST" --strip-components=1
 rm -f "$SDK/$TARBALL"
 
-echo ">> 4/4 install the wasm backend"
-npm install --no-save "$WASM_PKG"
+# Copy (not `npm install`) both packages straight into node_modules: package.json
+# pins the not-yet-published @o1-labs/mina-sdk@^0.4.0, so any `npm install` here would
+# fail to resolve. Base deps are assumed already present in this dev checkout.
+echo ">> 4/4 place the wasm backend in node_modules"
+WASM_DEST="$MCP/node_modules/mina-verify-wasm"
+rm -rf "$WASM_DEST"; mkdir -p "$WASM_DEST"
+cp -r "$WASM_PKG/." "$WASM_DEST/"
 
 echo ">> done. run: npm run demo:honesty"
