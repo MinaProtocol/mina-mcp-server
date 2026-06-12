@@ -34,6 +34,9 @@ describe("MCP Server - Live Mode", () => {
         "get_sync_status",
         "get_transaction_status",
         "list_examples",
+        // Trustless verification — registered on verifiable networks (devnet/mainnet).
+        "verify_chain_tip",
+        "check_endpoint_honesty",
         // Rosetta Data API — registered when network has rosettaUrl + rosettaNetwork.
         "rosetta_account",
         "rosetta_block",

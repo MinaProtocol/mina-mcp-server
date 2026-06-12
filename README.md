@@ -236,6 +236,30 @@ For agent workflows, a companion Claude skill — [`.claude/skills/mesa-upgrade`
 wraps this tool with a per-phase operator runbook (what to do / not do before, during,
 and after the fork).
 
+### Trustless verification (live mode — devnet/mainnet)
+
+On `--network devnet` or `--network mainnet` the server registers two tools that let an
+agent **cryptographically verify the chain** instead of trusting the daemon:
+
+- **`verify_chain_tip`** — fetches the canonical precomputed block from the public block
+  bucket and checks its Pickles/kimchi SNARK proof. A valid proof attests the *entire*
+  chain back to genesis by recursion, with no trust in the daemon or the bucket (a forged
+  block won't verify). Returns the proof-backed height / state hash / ledger hash.
+- **`check_endpoint_honesty`** — reads the daemon's own claims about a block (state hash,
+  height, ledger hashes), independently verifies the canonical block's proof, and compares.
+  A mismatch means the daemon is serving inconsistent or invalid data.
+
+The proof verifier is an **optional** WebAssembly package; enable these tools by installing
+it where the server runs:
+
+```bash
+npm install mina-verify-wasm
+```
+
+> **Heads-up:** verification is CPU-bound and currently takes **~tens of seconds per call**,
+> during which the call blocks. It's meant for occasional integrity checks, not hot paths.
+> Without `mina-verify-wasm` installed, the tools return a clear install hint.
+
 ### Live write mode (experimental — client-side signing)
 
 Live mode can be promoted from read-only to read+write by handing the server one or more wallet keys. Sends are signed **in this process** with [`mina-signer`](https://www.npmjs.com/package/mina-signer) and submitted as pre-signed transactions to the daemon. No daemon-side wallet, no faucet on devnet/mainnet, no key material on the wire.
@@ -405,6 +429,7 @@ All snapshot tools, plus:
 | `rosetta_status` / `rosetta_account` / `rosetta_block` / `rosetta_mempool` / `rosetta_mempool_transaction` | Mina-Rosetta Data API (Coinbase spec) |
 | `describe_state` | Live snapshot incl. preflight + Rosetta + faucet hints |
 | `list_examples` / `get_example` | Live-mode-applicable workflows |
+| `verify_chain_tip` / `check_endpoint_honesty` | Trustless SNARK-proof verification (devnet/mainnet; needs `mina-verify-wasm`) |
 
 ## Development
 

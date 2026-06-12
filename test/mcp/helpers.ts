@@ -25,6 +25,7 @@ import { registerStateTools } from "../../src/tools/state.js";
 import { registerExampleTools } from "../../src/tools/examples.js";
 import { registerRosettaTools } from "../../src/tools/rosetta.js";
 import { registerUpgradeTools } from "../../src/tools/upgrade.js";
+import { registerVerifyTools } from "../../src/tools/verify.js";
 
 export function createMockDb() {
   return {
@@ -185,6 +186,7 @@ export async function setupLiveMcp(networkName: NetworkName = "devnet"): Promise
   registerExampleTools(server, getProvider, "live");
   registerRosettaTools(server, getProvider, "live");
   registerUpgradeTools(server, getProvider, "live");
+  registerVerifyTools(server, getProvider, "live");
 
   const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
   const client = new Client({ name: "test-client", version: "0.1.0" });
