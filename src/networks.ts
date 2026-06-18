@@ -48,7 +48,19 @@ export interface NetworkConfig {
   // these, and snapshot mode is simply unavailable for them.
   archiveDumpPrefix?: string;
   archiveDumpCadence?: ArchiveDumpCadence;
+  // Public GCS bucket base URL serving per-block precomputed JSON, named
+  //   ${precomputedBlockBaseUrl}/${name}-${height}-${stateHash}.json
+  // These blocks carry the full protocol state + SNARK proof, so they are the
+  // verifiable input for the verify_chain_tip / check_endpoint_honesty tools.
+  // Only set for networks whose verification key is embedded in the verifier
+  // (devnet, mainnet); omitted elsewhere, where trustless verification is
+  // unavailable (mesa/mesa-mut have no embedded VK).
+  precomputedBlockBaseUrl?: string;
 }
+
+// The public bucket carrying per-block precomputed JSON for the long-lived
+// networks. Files: `<network>-<height>-<stateHash>.json`.
+const PRECOMPUTED_BLOCK_BUCKET = "https://storage.googleapis.com/mina_network_block_data";
 
 export const NETWORKS: Record<NetworkName, NetworkConfig> = {
   devnet: {
@@ -63,6 +75,7 @@ export const NETWORKS: Record<NetworkName, NetworkConfig> = {
     rosettaNetwork: "devnet",
     archiveDumpPrefix: "devnet-archive-dump",
     archiveDumpCadence: "daily",
+    precomputedBlockBaseUrl: PRECOMPUTED_BLOCK_BUCKET,
   },
   mainnet: {
     name: "mainnet",
@@ -75,6 +88,7 @@ export const NETWORKS: Record<NetworkName, NetworkConfig> = {
     rosettaNetwork: "mainnet",
     archiveDumpPrefix: "mainnet-archive-dump",
     archiveDumpCadence: "daily",
+    precomputedBlockBaseUrl: PRECOMPUTED_BLOCK_BUCKET,
   },
   mesa: {
     name: "mesa",
