@@ -1,11 +1,5 @@
 import { z } from "zod";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
-import {
-  compareToClaims,
-  verifyPrecomputedBlock,
-  VerificationBackendError,
-  type VerifiedBlock,
-} from "@o1-labs/mina-sdk";
 import { AnyProvider, Mode } from "../server-factory.js";
 import { LiveProvider } from "../providers/live.js";
 import { NetworkConfig } from "../networks.js";
@@ -19,6 +13,58 @@ const VERIFIABLE_NETWORKS = new Set(["devnet", "mainnet"]);
 // one the bucket has published.
 const TIP_SEARCH_DEPTH = 8;
 const BLOCK_FETCH_TIMEOUT_MS = 45_000;
+
+type VerificationNetwork = "devnet" | "mainnet";
+
+interface VerifiedBlock {
+  height: number;
+  stateHash: string;
+  previousStateHash?: string;
+  stagedLedgerHash?: string;
+}
+
+interface ClaimComparison {
+  honest: boolean;
+  facts: VerifiedBlock;
+  mismatches: Array<{ field: string; claimed: unknown; actual: unknown }>;
+}
+
+interface VerificationApi {
+  verifyPrecomputedBlock: (json: string, opts: { network: VerificationNetwork }) => VerifiedBlock;
+  compareToClaims: (
+    facts: VerifiedBlock,
+    claimed: Partial<VerifiedBlock> & { height: number; stateHash: string },
+  ) => ClaimComparison;
+  VerificationBackendError?: new (...args: unknown[]) => Error;
+}
+
+let verificationApiCache: VerificationApi | null | undefined;
+
+function asVerificationApi(mod: Record<string, unknown>): VerificationApi | null {
+  if (
+    typeof mod.verifyPrecomputedBlock !== "function" ||
+    typeof mod.compareToClaims !== "function"
+  ) {
+    return null;
+  }
+  return {
+    verifyPrecomputedBlock: mod.verifyPrecomputedBlock as VerificationApi["verifyPrecomputedBlock"],
+    compareToClaims: mod.compareToClaims as VerificationApi["compareToClaims"],
+    ...(typeof mod.VerificationBackendError === "function"
+      ? { VerificationBackendError: mod.VerificationBackendError as VerificationApi["VerificationBackendError"] }
+      : {}),
+  };
+}
+
+async function loadVerificationApi(): Promise<VerificationApi | null> {
+  if (verificationApiCache !== undefined) return verificationApiCache;
+  try {
+    verificationApiCache = asVerificationApi(await import("@o1-labs/mina-sdk"));
+  } catch {
+    verificationApiCache = null;
+  }
+  return verificationApiCache;
+}
 
 /** Returns the active provider iff it is a live provider on a verifiable network. */
 function verifiableLive(provider: AnyProvider): LiveProvider | null {
@@ -60,12 +106,28 @@ function text(s: string) {
   return { content: [{ type: "text" as const, text: s }] };
 }
 
-function backendHint(e: unknown): string | null {
-  if (e instanceof VerificationBackendError) {
+function missingVerificationApiHint(): string {
+  return (
+    "Verification API not available in the installed @o1-labs/mina-sdk package. " +
+    "Install or link an SDK build that exports `verifyPrecomputedBlock` and " +
+    "`compareToClaims`; the npm-published SDK may not include this API yet. " +
+    "For local development, see `./demo/setup-local.sh`."
+  );
+}
+
+function backendHint(e: unknown, api: VerificationApi): string | null {
+  const BackendError = api.VerificationBackendError;
+  if (
+    (BackendError && e instanceof BackendError) ||
+    (e instanceof Error && e.name === "VerificationBackendError")
+  ) {
+    const detail = e instanceof Error ? e.message : String(e);
     return (
       "Verification backend not available. The proof verifier is an optional WebAssembly " +
-      "package; install it where the MCP server runs:\n\n    npm install mina-verify-wasm\n\n" +
-      `(${e.message})`
+      "package; make `mina-verify-wasm` available where the MCP server runs. " +
+      "Once published to npm, install it with:\n\n    npm install mina-verify-wasm\n\n" +
+      "For local development before publication, see `./demo/setup-local.sh`.\n\n" +
+      `(${detail})`
     );
   }
   return null;
@@ -112,6 +174,8 @@ export function registerVerifyTools(
       }
       const cfg = provider.network;
       const vkNetwork = (net ?? cfg.name) as "devnet" | "mainnet";
+      const api = await loadVerificationApi();
+      if (!api) return text(missingVerificationApiHint());
 
       try {
         // Resolve the target block + its precomputed JSON.
@@ -141,7 +205,7 @@ export function registerVerifyTools(
           }
         }
 
-        const facts = verifyPrecomputedBlock(json, { network: vkNetwork });
+        const facts = api.verifyPrecomputedBlock(json, { network: vkNetwork });
         return text(
           `VERIFIED ✓ — the ${cfg.name} chain tip is cryptographically valid.\n\n` +
             `  height              ${facts.height}\n` +
@@ -152,7 +216,7 @@ export function registerVerifyTools(
             "back to genesis. No trust in the daemon or the block bucket was required.",
         );
       } catch (e) {
-        const hint = backendHint(e);
+        const hint = backendHint(e, api);
         if (hint) return text(hint);
         return text(`Verification failed: ${(e as Error).message}`);
       }
@@ -179,6 +243,8 @@ export function registerVerifyTools(
       }
       const cfg = provider.network;
       const vkNetwork = (net ?? cfg.name) as "devnet" | "mainnet";
+      const api = await loadVerificationApi();
+      if (!api) return text(missingVerificationApiHint());
 
       try {
         // What the daemon CLAIMS about the target block.
@@ -208,11 +274,11 @@ export function registerVerifyTools(
           if (!picked || !json) {
             return text(
               `No precomputed block published yet for any of the last ${TIP_SEARCH_DEPTH} tips; ` +
-                "cannot cross-check the daemon right now. Try again shortly.",
+              "cannot cross-check the daemon right now. Try again shortly.",
             );
           }
-          const facts = verifyPrecomputedBlock(json, { network: vkNetwork });
-          const result = compareToClaims(facts, {
+          const facts = api.verifyPrecomputedBlock(json, { network: vkNetwork });
+          const result = api.compareToClaims(facts, {
             height: picked.height,
             stateHash: picked.stateHash,
             previousStateHash: picked.previousStateHash,
@@ -227,13 +293,13 @@ export function registerVerifyTools(
           return text(
             `DISHONEST / UNVERIFIABLE ✗ — the daemon reports tip ${claim.height}-${claim.stateHash}, ` +
               "but no canonical precomputed block exists at that (height, state hash). The daemon's " +
-              "claimed block is not a published, proof-backed block.",
+            "claimed block is not a published, proof-backed block.",
           );
         }
-        const facts = verifyPrecomputedBlock(json, { network: vkNetwork });
-        return renderHonesty(cfg.name, compareToClaims(facts, claim));
+        const facts = api.verifyPrecomputedBlock(json, { network: vkNetwork });
+        return renderHonesty(cfg.name, api.compareToClaims(facts, claim));
       } catch (e) {
-        const hint = backendHint(e);
+        const hint = backendHint(e, api);
         if (hint) return text(hint);
         return text(`Honesty check failed: ${(e as Error).message}`);
       }
@@ -243,7 +309,7 @@ export function registerVerifyTools(
 
 function renderHonesty(
   networkName: string,
-  result: ReturnType<typeof compareToClaims>,
+  result: ClaimComparison,
 ) {
   const { honest, facts, mismatches } = result;
   if (honest) {

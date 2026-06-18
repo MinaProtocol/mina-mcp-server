@@ -249,8 +249,9 @@ agent **cryptographically verify the chain** instead of trusting the daemon:
   height, ledger hashes), independently verifies the canonical block's proof, and compares.
   A mismatch means the daemon is serving inconsistent or invalid data.
 
-The proof verifier is an **optional** WebAssembly package; enable these tools by installing
-it where the server runs:
+The proof verifier is an **optional** WebAssembly package; enable these tools with an
+SDK build that exports the verify API and by making `mina-verify-wasm` available where
+the server runs. Once both are published to npm, that is:
 
 ```bash
 npm install mina-verify-wasm
@@ -258,7 +259,9 @@ npm install mina-verify-wasm
 
 > **Heads-up:** verification is CPU-bound and currently takes **~tens of seconds per call**,
 > during which the call blocks. It's meant for occasional integrity checks, not hot paths.
-> Without `mina-verify-wasm` installed, the tools return a clear install hint.
+> Without the verify API or `mina-verify-wasm` installed, the tools return a clear
+> install hint. Until both are published, local development can wire the needed builds
+> with `./demo/setup-local.sh`.
 
 ### Live write mode (experimental — client-side signing)
 

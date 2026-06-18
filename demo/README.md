@@ -28,17 +28,17 @@ verifying, not trusting.
 
 ## Requirements
 
-The proof verifier is the optional `mina-verify-wasm` WebAssembly package. Until it (and
-`@o1-labs/mina-sdk` ≥ 0.4.0 with the verify API) are published, wire the local builds:
+The proof verifier is the optional `mina-verify-wasm` WebAssembly package. Until it and
+the SDK verify API are published, wire the local builds:
 
 ```bash
-./demo/setup-local.sh      # builds + links the sibling mina-verify / mina-sdk-js checkouts
+./demo/setup-local.sh      # builds + links sibling mina-verify / mina-sdk-js checkouts
 npm run demo:honesty
 ```
 
 `setup-local.sh` expects the sibling repos at `../../mina-verify` (with the
 `mina-verify-wasm` crate built) and `../mina-sdk-js`. In production none of this is
-needed — `npm install mina-verify-wasm` is the whole setup.
+needed once both packages are published.
 
 ## Presenting it
 
